@@ -35,7 +35,8 @@ def page(name, **values):
 
 
 def safe_next(value):
-    return value if value and value.startswith("/") and not value.startswith("//") else "/"
+    ok = value and value.startswith("/") and not value.startswith("//") and "\\" not in value
+    return value if ok and all(ord(ch) >= 32 for ch in value) else "/"
 
 
 async def signin(request):
