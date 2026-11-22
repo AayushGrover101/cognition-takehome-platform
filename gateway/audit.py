@@ -1,7 +1,7 @@
 """Per-app audit trail. Each app has its own hash chain, so each trail can be checked on its own.
 
 What gets recorded is decided on the server: every write tool, plus the read tools an app lists in
-`audit_reads` in its reviewed app.yaml. Nothing in the browser can switch it off.
+`audit` in its reviewed app.yaml. Nothing in the browser can switch it off.
 """
 import hashlib
 import json
