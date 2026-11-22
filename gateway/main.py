@@ -159,7 +159,9 @@ async def web_static(request):
 def from_own_page(request, app_name):
     """A browser call to /api/<app>/ must come from that app's own pages, so one app's code can't use
     the signed-in person's grants in another app. Non-browser clients send no Sec-Fetch-Site; they
-    can only do what the person could do anyway."""
+    can only do what the person could do anyway. On one shared origin this only guards against
+    accidental cross-app calls (app code can forge the referrer or open another app's page); real
+    isolation needs one subdomain per app plus the publish checks."""
     site = request.headers.get("sec-fetch-site")
     if site is None:
         return True
