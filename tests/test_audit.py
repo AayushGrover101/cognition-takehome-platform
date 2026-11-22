@@ -127,3 +127,21 @@ def test_retention_is_validated_against_the_company_minimum():
         "audit_retention_days must be a whole number of days, at least 1825"]
     assert config.app_problems({"title": "t", "access": ["engineer"], "audit_retention_days": 3650}) == []
     assert config.load_apps()["kyc-demo"]["audit_retention_days"] == 2555
+
+
+def test_prune_keeps_unexpired_entries_even_if_clocks_went_backwards(gateway, monkeypatch):
+    from datetime import timedelta
+    real = audit.now
+    user = {"id": "dana", "name": "Dana Ortiz", "role": "compliance_officer"}
+    for days_ago in (400, 10, 400):
+        monkeypatch.setattr(audit, "now", lambda d=days_ago: real() - timedelta(days=d))
+        audit.record("x", user, "kyc.escalate_case", "write", {"n": days_ago}, "ok")
+    monkeypatch.setattr(audit, "now", real)
+    audit.prune("x", 365)
+    assert [r["seq"] for r in audit.entries("x")] == [3, 2] and audit.verify("x") == (True, None)
+
+
+def test_search_matches_non_ascii_inputs(gateway):
+    user = {"id": "dana", "name": "Dana Ortiz", "role": "compliance_officer"}
+    audit.record("x", user, "kyc.escalate_case", "write", {"reason": "José Núñez"}, "ok")
+    assert len(audit.entries("x", q="José")) == 1 and audit.verify("x") == (True, None)
