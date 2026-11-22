@@ -55,6 +55,12 @@ Open `http://localhost:8090`. Sign in as Sam Kim for the admin page at `/admin`.
 - Rows cannot be edited, and can only be deleted once their retention period has passed. The database
   enforces both. Each row carries a fingerprint of the previous row, so tampering is detectable.
 
+## Known limit of the browser rule
+
+A browser cannot be told to stop a page from navigating itself to an outside address, so an app could
+redirect with data packed into the link. The publish checks in the apps repository reject redirects
+and outside addresses in app code for this reason. Giving each app its own address does not change this.
+
 ## Prototype shortcuts
 
 | Here | In production |
