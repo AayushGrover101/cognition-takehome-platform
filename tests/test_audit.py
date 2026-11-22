@@ -1,3 +1,4 @@
+import os
 import sqlite3
 
 from gateway import audit
@@ -74,3 +75,55 @@ def test_entries_across_apps_are_newest_first(gateway):
     call(gateway("lena"), "slack.post_message", {"channel": "#support", "text": "a"}, app="notifier")
     call(gateway("dana"), "kyc.escalate_case", {"case_id": "KYC-1002", "reason": "PEP match"})
     assert [(r["app"], r["seq"]) for r in audit.entries()] == [("kyc-demo", 2), ("notifier", 1), ("kyc-demo", 1)]
+
+
+def test_filters_and_search(gateway):
+    dana, priya = gateway("dana"), gateway("priya")
+    call(dana, "kyc.escalate_case", {"case_id": "KYC-1001", "reason": "PEP match"})
+    call(priya, "kyc.escalate_case", {"case_id": "KYC-1002", "reason": "Address mismatch"})
+    call(dana, "kyc.get_case_full", {"case_id": "KYC-1002"})
+    assert [r["user_id"] for r in audit.entries("kyc-demo", user="priya")] == ["priya"]
+    assert [r["tool"] for r in audit.entries("kyc-demo", kind="read")] == ["kyc.get_case_full"]
+    assert {r["inputs"]["case_id"] for r in audit.entries("kyc-demo", q="KYC-1002")} == {"KYC-1002"}
+    assert [r["user_id"] for r in audit.entries("kyc-demo", q="pep")] == ["dana"]
+    assert audit.entries("kyc-demo", q="100%") == []
+    page = gateway("sam").get("/audit/kyc-demo", params={"q": "mismatch"}).text
+    assert "1 matching" in page and "Address mismatch" in page and "PEP match" not in page
+    assert '<option value="priya">Priya Shah</option>' in page
+
+
+def test_retention_deletes_old_entries_and_the_chain_still_checks(gateway, monkeypatch):
+    from datetime import timedelta
+    real = audit.now
+    user = {"id": "dana", "name": "Dana Ortiz", "role": "compliance_officer"}
+    for days_ago in (400, 300, 10):
+        monkeypatch.setattr(audit, "now", lambda d=days_ago: real() - timedelta(days=d))
+        audit.record("x", user, "kyc.escalate_case", "write", {"n": days_ago}, "ok")
+    monkeypatch.setattr(audit, "now", real)
+    audit.record("x", user, "kyc.escalate_case", "write", {"n": 0}, "ok", retention_days=365)
+    assert [r["inputs"]["n"] for r in audit.entries("x")] == [0, 10, 300]
+    assert audit.verify("x") == (True, None)
+    with sqlite3.connect(os.environ["AUDIT_DB"]) as conn:
+        conn.execute("DELETE FROM audit WHERE app = 'x' AND seq = 2")
+    assert audit.verify("x") == (False, 3)
+
+
+def test_chain_continues_after_everything_is_pruned(gateway, monkeypatch):
+    from datetime import timedelta
+    real = audit.now
+    user = {"id": "dana", "name": "Dana Ortiz", "role": "compliance_officer"}
+    monkeypatch.setattr(audit, "now", lambda: real() - timedelta(days=50))
+    audit.record("x", user, "kyc.escalate_case", "write", {}, "ok")
+    monkeypatch.setattr(audit, "now", real)
+    audit.prune("x", 30)
+    assert audit.entries("x") == []
+    audit.record("x", user, "kyc.escalate_case", "write", {}, "ok")
+    assert [r["seq"] for r in audit.entries("x")] == [2] and audit.verify("x") == (True, None)
+
+
+def test_retention_is_validated_against_the_company_minimum():
+    from gateway import config
+    assert config.app_problems({"title": "t", "access": ["engineer"], "audit_retention_days": 30}) == [
+        "audit_retention_days must be a whole number of days, at least 1825"]
+    assert config.app_problems({"title": "t", "access": ["engineer"], "audit_retention_days": 3650}) == []
+    assert config.load_apps()["kyc-demo"]["audit_retention_days"] == 2555

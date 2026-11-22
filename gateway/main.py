@@ -207,7 +207,8 @@ async def call_tool(request):
         return refuse(404, f"This app has no tool called {name}")
     def log(outcome, detail="", inputs=None):
         if config.audited(app, tool):
-            audit.record(app["name"], user, name, tool.kind, inputs or {}, outcome, detail)
+            audit.record(app["name"], user, name, tool.kind, inputs or {}, outcome, detail,
+                         retention_days=app["audit_retention_days"])
 
     if name not in config.tools_for(app, user["role"]):
         error = f"Your role ({label(user['role'])}) can't use {name} in this app"
@@ -274,14 +275,34 @@ async def audit_page(request):
         return notice("You can't view this audit trail",
                       [f"Signed in as {user['name']} ({label(user['role'])}).",
                        "Roles listed in the app's audit_viewers, and platform admins, can view it."], 403)
+    audit.prune(app["name"], app["audit_retention_days"])
     ok, broken = audit.verify(app["name"])
     chain = ('<span class="tag allowed">Chain intact</span>' if ok else
              f'<span class="tag refused">Chain broken at entry {broken}</span>')
     reads = ", ".join(app["audit_reads"]) or "none"
     crumbs = (f'<span class="crumb">/</span><span class="here">{html.escape(app["title"])}</span>'
               f'<span class="crumb">/</span><span class="here">Audit trail</span>')
+    q = request.query_params
+    chosen = {k: q.get(k, "").strip() for k in ("user", "tool", "kind", "outcome", "q")}
+    people, tools = audit.facets(app["name"])
+    rows = audit.entries(app["name"], limit=500, **{k: v or None for k, v in chosen.items()})
+
+    def menu(name, blank, options):
+        opts = "".join(f'<option value="{html.escape(v)}"{" selected" if chosen[name] == v else ""}>{html.escape(t)}</option>'
+                       for v, t in [("", blank)] + list(options))
+        return f'<select name="{name}" aria-label="{html.escape(blank)}">{opts}</select>'
+    filters = (f'<form class="filters" method="get" action="/audit/{html.escape(app["name"])}">'
+               f'<input type="search" name="q" value="{html.escape(chosen["q"])}" placeholder="Search people, tools, inputs, reasons">'
+               + menu("user", "Anyone", people.items()) + menu("tool", "Any tool", [(t, t) for t in tools])
+               + menu("kind", "Reads and writes", [("read", "Reads"), ("write", "Writes")])
+               + menu("outcome", "Any result", [("ok", "OK"), ("refused", "Refused")])
+               + '<button class="btn" type="submit">Filter</button>'
+               + (f'<a class="btn ghost" href="/audit/{html.escape(app["name"])}">Clear</a>' if any(chosen.values()) else "")
+               + '</form>')
+    shown = f'{len(rows)} matching' if any(chosen.values()) else f'{len(rows)} entries'
     return page("audit.html", topbar=topbar(user, crumbs), title=html.escape(app["title"]), chain=chain,
-                reads=html.escape(reads), rows=audit_rows(audit.entries(app["name"])))
+                reads=html.escape(reads), retention=str(app["audit_retention_days"]), filters=filters,
+                shown=shown, rows=audit_rows(rows))
 
 
 async def csp_report(request):
