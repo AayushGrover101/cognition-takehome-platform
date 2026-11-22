@@ -71,3 +71,16 @@ def test_unreadable_manifest_only_breaks_that_app(gateway):
 def test_sign_in_keeps_the_page_you_asked_for(gateway):
     r = gateway().get("/apps/kyc-demo/app.js?case=KYC-1004")
     assert r.headers["location"] == "/signin?next=%2Fapps%2Fkyc-demo%2Fapp.js%3Fcase%3DKYC-1004"
+
+
+def test_sign_in_page_offers_a_dropdown_of_accounts(gateway):
+    text = gateway().get("/signin?next=/apps/kyc-demo/").text
+    assert '<select name="user" required>' in text and 'value="/apps/kyc-demo/"' in text
+    assert '<option value="priya">Priya Shah \u2014 analyst</option>' in text
+    assert '<option value="dana" selected>' in gateway("dana").get("/signin").text
+
+
+def test_sign_out_clears_the_cookie(gateway):
+    r = gateway("priya").post("/signout")
+    assert r.status_code == 303 and r.headers["location"] == "/signin"
+    assert 'gw_user=""' in r.headers["set-cookie"] or "Max-Age=0" in r.headers["set-cookie"]

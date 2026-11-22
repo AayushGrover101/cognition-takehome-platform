@@ -16,7 +16,7 @@ python3 -m pytest tests
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| Sign-in | `/signin`, `policy.yaml` | Mocked single sign-on: pick a person; their role comes from `policy.yaml`. Sets an HTTP-only cookie. |
+| Sign-in | `/signin`, `/signout`, `policy.yaml` | Mocked single sign-on: choose an account from a dropdown; the role comes from `policy.yaml`. Sets an HTTP-only cookie. |
 | Portal | `/` | Lists only the apps whose `access` includes your role. |
 | App hosting | `/apps/<app>/...` | Reads `APPS_DIR/apps/<app>/` on every request. Checks sign-in, a valid `app.yaml`, and that your role is in `access`, for every file. Serves static file types only, never outside the app folder. |
 | Browser lockdown | `Content-Security-Policy` on app pages | The page loads files only from the gateway and may send requests only to `/api/<app>/`. |

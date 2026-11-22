@@ -2,8 +2,14 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Internal tools</title><link rel="stylesheet" href="/web/base.css"></head>
 <body>
-<div class="top"><span class="brand">Internal tools</span><span class="spacer"></span>
-<span class="muted">{{user}} · {{role}}</span><a class="link" href="/signin">Switch user</a></div>
-<div class="wrap"><h1>Your apps</h1><p class="muted">Apps your role is allowed to open.</p>
-<div class="cards">{{cards}}</div></div>
+<header class="top">
+<a class="logo" href="/"><span class="logo-mark">IT</span>Internal tools</a>
+<span class="spacer"></span>
+<div class="me"><span class="avatar">{{initials}}</span><div><div class="name">{{user}}</div><div class="role">{{role}}</div></div></div>
+<form method="post" action="/signout"><button class="btn small" type="submit">Sign out</button></form>
+</header>
+<main class="wrap">
+<div class="page-head"><div><h1>Your apps</h1><p class="muted" style="margin:0">Tools available to your role.</p></div><span class="count">{{count}}</span></div>
+{{cards}}
+</main>
 </body></html>

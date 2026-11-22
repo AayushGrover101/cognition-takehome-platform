@@ -1,11 +1,18 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in</title><link rel="stylesheet" href="/web/base.css"></head>
-<body><div class="narrow">
+<title>Sign in · Internal tools</title><link rel="stylesheet" href="/web/base.css"></head>
+<body><main class="center">
+<div class="logo"><span class="logo-mark">IT</span>Internal tools</div>
+<form method="post" action="/signin" class="auth">
 <h1>Sign in</h1>
-<p class="muted">Stand-in for company single sign-on. Pick who to be. In production your identity and role come from the company sign-in and cannot be chosen.</p>
-<form method="post" action="/signin" class="list">
+<p class="lead">Use your company account to open your team's tools.</p>
 <input type="hidden" name="next" value="{{next}}">
-{{rows}}
+<label class="field"><span>Account</span>
+<div class="select"><select name="user" required>
+<option value="" disabled{{none_selected}}>Choose an account…</option>
+{{options}}
+</select></div></label>
+<button class="btn primary block" type="submit">Continue</button>
+<p class="hint">Demo sign-in. In production this is the company's single sign-on, and your role comes from it.</p>
 </form>
-</div></body></html>
+</main></body></html>

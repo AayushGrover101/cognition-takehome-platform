@@ -32,6 +32,10 @@ def page(name, status=200, **values):
     return HTMLResponse(text, status_code=status)
 
 
+def initials(text):
+    return "".join(word[0] for word in text.split()[:2]).upper()
+
+
 def notice(title, lines, status):
     items = "".join(f"<li>{html.escape(line)}</li>" for line in lines)
     return page("notice.html", status, title=html.escape(title), items=items)
@@ -53,14 +57,14 @@ async def signin(request):
         return response
     nxt = safe_next(request.query_params.get("next", "/"))
     me = current_user(request)
-    rows = "".join(
-        f'<button class="row" name="user" value="{html.escape(u["id"])}">'
-        f'<span class="who">{html.escape(u["name"])}</span>'
-        f'<span class="muted">{html.escape(label(u["role"]))}</span>'
-        f'{"<span class=tag>current</span>" if me and me["id"] == u["id"] else ""}</button>'
+    current = me["id"] if me else ""
+    options = "".join(
+        f'<option value="{html.escape(u["id"])}"{" selected" if u["id"] == current else ""}>'
+        f'{html.escape(u["name"])} — {html.escape(label(u["role"]))}</option>'
         for u in config.users().values()
     )
-    return page("signin.html", rows=rows, next=html.escape(nxt, quote=True))
+    return page("signin.html", options=options, none_selected="" if me else " selected",
+                next=html.escape(nxt, quote=True))
 
 
 def can_open(user, app):
@@ -71,15 +75,27 @@ async def portal(request):
     user = current_user(request)
     if not user:
         return RedirectResponse("/signin", status_code=303)
+    apps = [app for app in config.load_apps().values() if can_open(user, app)]
     cards = "".join(
-        f'<a class="card" href="/apps/{html.escape(app["name"])}/"><div class="title">{html.escape(app["title"])}</div>'
-        f'<div class="muted">{html.escape(str(app.get("description", "")))}</div></a>'
-        for app in config.load_apps().values() if can_open(user, app)
-    ) or '<p class="muted">No apps are available for your role yet.</p>'
-    return page("portal.html", cards=cards, user=html.escape(user["name"]), role=html.escape(label(user["role"])))
+        f'<a class="card" href="/apps/{html.escape(app["name"])}/"><span class="icon">{html.escape(initials(app["title"]))}</span>'
+        f'<div><div class="title">{html.escape(app["title"])}</div>'
+        f'<div class="desc">{html.escape(str(app.get("description", "")))}</div></div>'
+        f'<span class="open">Open app →</span></a>'
+        for app in apps
+    )
+    cards = f'<div class="cards">{cards}</div>' if apps else (
+        '<div class="empty"><strong>No apps yet</strong>No apps are available for your role. '
+        'Ask your team lead if you expected to see one.</div>')
+    count = f'{len(apps)} app{"" if len(apps) == 1 else "s"}'
+    return page("portal.html", cards=cards, count=count, initials=html.escape(initials(user["name"])),
+                user=html.escape(user["name"]), role=html.escape(label(user["role"])))
 
 
-# ---------- serving apps (static files only) ----------
+async def signout(request):
+    response = RedirectResponse("/signin", status_code=303)
+    response.delete_cookie(COOKIE)
+    return response
+
 
 def public_origin(request):
     if os.environ.get("PUBLIC_ORIGIN"):
@@ -169,6 +185,7 @@ def create_app():
     return Starlette(routes=[
         Route("/", portal),
         Route("/signin", signin, methods=["GET", "POST"]),
+        Route("/signout", signout, methods=["POST"]),
         Route("/apps/{app}/", serve_app),
         Route("/apps/{app}/{path:path}", serve_app),
         Route("/shared/{path:path}", serve_shared),
