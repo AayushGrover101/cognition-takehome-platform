@@ -336,9 +336,12 @@ async def admin_page(request):
             f'{", ".join(f"<code>{html.escape(t)}</code>" for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
             for r in a["access"] if r in config.ROLES) if not a["problems"] else "—"
         granted = [] if a["problems"] else sorted({t for r in a["access"] for t in config.tools_for(a, r)})
-        audited = [connectors.TOOLS[t] for t in granted if config.audited(a, connectors.TOOLS[t])]
+        # Every tool on the app's connectors that the gateway would log, including refused attempts at ungranted ones.
+        audited = [] if a["problems"] else [t for t in connectors.TOOLS.values()
+                                            if t.connector in a["connectors"] and config.audited(a, t)]
         listed = "".join(f'<div><code>{html.escape(t.name)}</code> <span class="note">'
-                         f'{"write, always" if t.kind == "write" else "read, opted in"}</span></div>' for t in audited)
+                         f'{"write, always" if t.kind == "write" else "read, opted in"}'
+                         f'{"" if t.name in granted else "; no role granted, refusals only"}</span></div>' for t in audited)
         audit_cell = (f'<details class="audited"><summary>{len(audited)} tool{"s" if len(audited) != 1 else ""} audited</summary>'
                       f'{listed}</details>' if audited else '<span class="note">Nothing audited</span>')
         trail = f'<a href="/audit/{html.escape(a["name"])}">{counts.get(a["name"], 0)} entries</a>'

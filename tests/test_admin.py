@@ -36,3 +36,13 @@ def test_admin_lists_exactly_which_tools_are_audited(gateway):
     assert "<code>kyc.get_case_full</code> <span class=\"note\">read, opted in</span>" in text
     assert "<code>kyc.decide_case</code> <span class=\"note\">write, always</span>" in text
     assert "<code>kyc.get_case</code> <span class=\"note\">" not in text
+
+
+def test_admin_lists_audited_tools_no_role_is_granted(gateway, tmp_path, monkeypatch):
+    from gateway import config
+    apps = config.load_apps()
+    kyc = apps["kyc-demo"]
+    kyc["roles"] = {r: {"tools": ["kyc.list_cases"]} for r in kyc["roles"]}
+    monkeypatch.setattr(config, "load_apps", lambda: apps)
+    text = gateway("sam").get("/admin").text
+    assert "<code>kyc.get_case_full</code> <span class=\"note\">read, opted in; no role granted, refusals only" in text
