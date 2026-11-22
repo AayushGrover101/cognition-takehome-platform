@@ -1,7 +1,7 @@
 def test_signed_out_people_are_sent_to_sign_in(gateway):
     assert gateway().get("/").headers["location"] == "/signin"
     r = gateway().get("/apps/kyc-demo/")
-    assert r.status_code == 303 and r.headers["location"] == "/signin?next=/apps/kyc-demo/"
+    assert r.status_code == 303 and r.headers["location"] == "/signin?next=%2Fapps%2Fkyc-demo%2F"
     assert gateway().get("/api/kyc-demo/_me").status_code == 401
 
 
@@ -66,3 +66,8 @@ def test_unreadable_manifest_only_breaks_that_app(gateway):
     assert gateway("priya").get("/").status_code == 200
     assert gateway("priya").get("/apps/kyc-demo/").status_code == 200
     assert gateway("priya").get("/apps/bad-encoding/").status_code == 403
+
+
+def test_sign_in_keeps_the_page_you_asked_for(gateway):
+    r = gateway().get("/apps/kyc-demo/app.js?case=KYC-1004")
+    assert r.headers["location"] == "/signin?next=%2Fapps%2Fkyc-demo%2Fapp.js%3Fcase%3DKYC-1004"

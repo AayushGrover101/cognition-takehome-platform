@@ -2,6 +2,7 @@
 import html
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from starlette.applications import Starlette
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -111,7 +112,8 @@ async def serve_app(request):
     name, rel = request.path_params["app"], request.path_params.get("path") or "index.html"
     user = current_user(request)
     if not user:
-        return RedirectResponse(f"/signin?next=/apps/{name}/", status_code=303)
+        here = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+        return RedirectResponse(f"/signin?next={quote(safe_next(here), safe='')}", status_code=303)
     app = config.load_apps().get(name)
     if not app:
         return notice("App not found", [f"There is no app called {name}."], 404)
