@@ -25,11 +25,11 @@ users:
 # never a shorter one. 5 years is a common floor for financial records.
 audit_retention_days: {minimum: 1825, default: 2555}
 
-# Connector groups. Internal: company systems. External: outside services. Blocked: no app may use it.
-# An app can't combine Internal and External connectors. A connector missing here counts as Blocked.
+# Connector groups (as in Power Platform DLP). Business: company systems and data. Non-business: outside services.
+# Blocked: no app may use it. An app can't combine Business and Non-business connectors. A connector missing here counts as Blocked.
 connectors:
-  kyc: internal
-  refunds: internal
-  flags: internal
-  slack: external
+  kyc: business
+  refunds: business
+  flags: business
+  slack: non-business
   gdrive: blocked

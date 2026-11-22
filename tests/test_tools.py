@@ -59,7 +59,7 @@ def test_business_rules_in_the_system_refuse_with_a_reason(gateway):
     assert r.status_code == 409 and r.json() == {"ok": False, "error": "KYC-1005 is already approved"}
 
 
-def test_external_app_works_for_granted_roles_only(gateway):
+def test_non_business_app_works_for_granted_roles_only(gateway):
     r = call(gateway("lena"), "slack.post_message", {"channel": "#support", "text": "Outage resolved"}, app="notifier")
     assert r.status_code == 200 and set(r.json()["data"]) == {"channel", "text", "sent_at"}
     assert call(gateway("marcus"), "slack.post_message", {"channel": "#support", "text": "hi"}, app="notifier").status_code == 403
@@ -68,7 +68,7 @@ def test_external_app_works_for_granted_roles_only(gateway):
 def test_connector_policy_is_enforced_when_the_app_is_loaded(gateway):
     sam = gateway("sam")
     mixed = sam.get("/apps/mixed/")
-    assert mixed.status_code == 403 and "combine Internal (kyc) and External (slack)" in mixed.text
+    assert mixed.status_code == 403 and "combine Business (kyc) and Non-business (slack)" in mixed.text
     assert "Connector gdrive is Blocked" in sam.get("/apps/drive-backup/").text
     bad = gateway("priya").get("/apps/bad-grants/").text
     for problem in ["kyc_analyst: unknown tool kyc.delete_everything", "kyc_analyst: refunds.* needs refunds in connectors",
