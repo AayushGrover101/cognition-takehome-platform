@@ -50,7 +50,8 @@ def test_the_admin_page_has_no_switch_buttons(gateway):
 
 
 @pytest.mark.parametrize("data", [["kyc"], {"apps": ["kyc-demo"]}, {"apps": {"kyc-demo": ""}}, {"connectors": {"kyc": None}},
-                                  {"widgets": {}}])
+                                  {"widgets": {}},
+                                  False, [], {"apps": False}, {"apps": []}, {"tools": 0}])
 def test_a_malformed_file_fails_closed(gateway, tmp_path, monkeypatch, data):
     (tmp_path / "bad.yaml").write_text(yaml.safe_dump(data))
     monkeypatch.setenv("SWITCHES_FILE", str(tmp_path / "bad.yaml"))

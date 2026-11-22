@@ -18,13 +18,14 @@ def path():
 def load():
     """{'apps': {name: reason}, 'connectors': {...}, 'tools': {...}}. A malformed file raises, so it fails closed."""
     try:
-        data = yaml.safe_load(path().read_text()) or {}
+        data = yaml.safe_load(path().read_text())
     except FileNotFoundError:
-        data = {}
+        data = None
+    data = {} if data is None else data
     problems = file_problems(data)
     if problems:
         raise ValueError(f"{path().name} is invalid: {'; '.join(problems)}")
-    return {key: dict(data.get(key) or {}) for key in KINDS.values()}
+    return {key: dict(data.get(key) or {}) for key in KINDS.values()}  # every section is a dict or None here
 
 
 def file_problems(data):
@@ -32,7 +33,7 @@ def file_problems(data):
         return ["the file must be a mapping"]
     problems = [f"unknown section {k}" for k in data if k not in KINDS.values()]
     for key in KINDS.values():
-        section = data.get(key) or {}
+        section = {} if data.get(key) is None else data.get(key)
         if not isinstance(section, dict):
             problems.append(f"{key} must map each name to a reason")
             continue
