@@ -10,7 +10,7 @@ import subprocess
 from pathlib import Path
 
 from starlette.applications import Starlette
-from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
 from . import audit, config, handlers, policy
@@ -281,7 +281,7 @@ async def csp_report(request):
                  {"address": blocked, "kind": str(report.get("effective-directive", ""))[:60]},
                  "refused", "Blocked by the browser rule: the app tried to reach an address it is not allowed to",
                  retention_days=REFUSED_DAYS)
-    return JSONResponse({}, status_code=204)
+    return Response(status_code=204)
 
 
 # ---------- admin ----------
