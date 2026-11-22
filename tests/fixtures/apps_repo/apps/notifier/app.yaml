@@ -1,6 +1,6 @@
 title: Support notifier
 description: Post updates to support channels.
-access: [support, support_lead]
+access: [support_agent, support_lead]
 connectors: [slack]
 roles:
   support_lead:

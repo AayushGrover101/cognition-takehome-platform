@@ -22,7 +22,7 @@ def current_user(request):
 
 
 def label(role):
-    return role.replace("_", " ")
+    return config.ROLES.get(role, role)
 
 
 def page(name, status=200, **values):
@@ -172,7 +172,7 @@ async def me(request):
     if not app or not can_open(user, app):
         return JSONResponse({"ok": False, "error": "You don't have access to this app"}, status_code=403)
     return JSONResponse({"ok": True, "data": {
-        "user": {"name": user["name"], "role": user["role"]},
+        "user": {"name": user["name"], "role": user["role"], "title": label(user["role"])},
         "app": {"name": app["name"], "title": app["title"]},
         "tools": config.tools_for(app, user["role"]),
     }})

@@ -55,7 +55,7 @@ document.addEventListener('click', (e) => {
 });
 
 gateway.me().then((me) => {
-  $('#who').textContent = `${me.user.name} · ${me.user.role.replace('_', ' ')}`;
+  $('#who').textContent = `${me.user.name} · ${me.user.title}`;
   $('#tools').innerHTML = me.tools.map((t) => `<code>${esc(t)}</code>`).join('');
   refresh();
 });

@@ -1,9 +1,9 @@
 title: KYC demo
 description: Review queue for pending KYC cases.
-access: [analyst, senior_reviewer]
+access: [kyc_analyst, compliance_officer]
 connectors: [kyc]
 roles:
-  analyst:
+  kyc_analyst:
     tools: [kyc.list_cases, kyc.get_case, kyc.escalate_case]
-  senior_reviewer:
+  compliance_officer:
     tools: [kyc.*]

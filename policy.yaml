@@ -1,13 +1,22 @@
 # Who exists and which role each person has. Stand-in for the company identity provider.
-roles: [analyst, senior_reviewer, ops, support, support_lead, admin]
+# Role id: job title. Each role matches a real team and the tools that team uses.
+roles:
+  kyc_analyst: KYC Analyst                  # Compliance: works the KYC queue, escalates hard cases
+  compliance_officer: Compliance Officer    # Compliance: approves/rejects cases, may see full tax IDs
+  support_agent: Support Agent              # Support: handles customer refund requests
+  support_lead: Support Lead                # Support: declines refunds, posts customer updates
+  product_manager: Product Manager          # Product: watches feature-flag rollouts
+  engineer: Software Engineer               # Engineering: turns flags on/off, changes rollouts
+  platform_engineer: Platform Engineer      # Owns the gateway and connectors, reviews app.yaml
 
 users:
-  - {id: priya,  name: Priya Shah,  role: analyst}
-  - {id: dana,   name: Dana Ortiz,  role: senior_reviewer}
-  - {id: omar,   name: Omar Haddad, role: ops}
-  - {id: marcus, name: Marcus Lee,  role: support}
+  - {id: priya,  name: Priya Shah,  role: kyc_analyst}
+  - {id: dana,   name: Dana Ortiz,  role: compliance_officer}
+  - {id: marcus, name: Marcus Lee,  role: support_agent}
   - {id: lena,   name: Lena Novak,  role: support_lead}
-  - {id: sam,    name: Sam Kim,     role: admin}
+  - {id: omar,   name: Omar Haddad, role: product_manager}
+  - {id: alex,   name: Alex Chen,   role: engineer}
+  - {id: sam,    name: Sam Kim,     role: platform_engineer}
 
 # Connector groups. Internal: company systems. External: outside services. Blocked: no app may use it.
 # An app can't combine Internal and External connectors. A connector missing here counts as Blocked.

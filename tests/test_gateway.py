@@ -57,7 +57,7 @@ def test_shared_files(gateway):
 
 def test_me_returns_user_and_app_only_to_people_with_access(gateway):
     data = gateway("dana").get("/api/kyc-demo/_me").json()["data"]
-    assert data == {"user": {"name": "Dana Ortiz", "role": "senior_reviewer"},
+    assert data == {"user": {"name": "Dana Ortiz", "role": "compliance_officer", "title": "Compliance Officer"},
                     "app": {"name": "kyc-demo", "title": "KYC demo"},
                     "tools": ["kyc.decide_case", "kyc.escalate_case", "kyc.get_case", "kyc.get_case_full",
                               "kyc.list_cases"]}
@@ -78,7 +78,7 @@ def test_sign_in_keeps_the_page_you_asked_for(gateway):
 def test_sign_in_page_offers_a_dropdown_of_accounts(gateway):
     text = gateway().get("/signin?next=/apps/kyc-demo/").text
     assert 'name="user" required>' in text and 'value="/apps/kyc-demo/"' in text
-    assert '<option value="priya">Priya Shah \u2014 analyst</option>' in text
+    assert '<option value="priya">Priya Shah \u2014 KYC Analyst</option>' in text
     assert '<option value="dana" selected>' in gateway("dana").get("/signin").text
 
 

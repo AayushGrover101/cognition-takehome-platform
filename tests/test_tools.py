@@ -14,7 +14,7 @@ def test_granted_tools_run_and_return_only_declared_fields(gateway):
 
 def test_tools_are_denied_unless_granted_to_the_role(gateway):
     r = call(gateway("priya"), "kyc.get_case_full", {"case_id": "KYC-1001"})
-    assert r.status_code == 403 and r.json()["error"] == "Your role (analyst) can't use kyc.get_case_full in this app"
+    assert r.status_code == 403 and r.json()["error"] == "Your role (KYC Analyst) can't use kyc.get_case_full in this app"
     assert call(gateway("priya"), "kyc.decide_case",
                 {"case_id": "KYC-1001", "decision": "approve", "reason": "ok"}).status_code == 403
 
@@ -71,8 +71,8 @@ def test_connector_policy_is_enforced_when_the_app_is_loaded(gateway):
     assert mixed.status_code == 403 and "combine Internal (kyc) and External (slack)" in mixed.text
     assert "Connector gdrive is Blocked" in sam.get("/apps/drive-backup/").text
     bad = gateway("priya").get("/apps/bad-grants/").text
-    for problem in ["analyst: unknown tool kyc.delete_everything", "analyst: refunds.* needs refunds in connectors",
-                    "analyst: refunds.issue_refund needs refunds in connectors", "Role admin has tools but is not in access"]:
+    for problem in ["kyc_analyst: unknown tool kyc.delete_everything", "kyc_analyst: refunds.* needs refunds in connectors",
+                    "kyc_analyst: refunds.issue_refund needs refunds in connectors", "Role platform_engineer has tools but is not in access"]:
         assert problem in bad
 
 

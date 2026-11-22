@@ -37,12 +37,12 @@ python3 -m pytest tests
 ```yaml
 title: KYC review queue
 description: Review and decide pending KYC cases.
-access: [analyst, senior_reviewer]   # roles that can open the app
+access: [kyc_analyst, compliance_officer]   # roles that can open the app
 connectors: [kyc]                    # can't mix Internal and External; Blocked is refused
 roles:                               # tools per role; anything not granted is denied
-  analyst:
+  kyc_analyst:
     tools: [kyc.list_cases, kyc.get_case, kyc.escalate_case]
-  senior_reviewer:
+  compliance_officer:
     tools: [kyc.*]                   # every kyc tool, including get_case_full and decide_case
 ```
 
