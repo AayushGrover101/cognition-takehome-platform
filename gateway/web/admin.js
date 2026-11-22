@@ -117,7 +117,7 @@ async function activityView() {
 
 async function outboxView() {
   const { rows } = await get('outbox');
-  return `<div class="head"><div class="grow"><h1>Sent outside</h1><p class="muted">Everything apps have sent to outside services through External connectors. Nothing is really sent in this prototype.</p></div></div>
+  return `<div class="head"><div class="grow"><h1>Sent outside</h1><p class="muted">Everything apps have sent to outside services such as Slack, whichever group the connector is in. Nothing is really sent in this prototype.</p></div></div>
     <div class="block"><table><tr><th>When</th><th>Service</th><th>To</th><th>Content</th><th>Sent by</th><th>App</th></tr>
     ${rows.map(r => `<tr><td class="nowrap muted">${when(r.ts)}</td><td>${esc(r.service)}</td><td>${esc(r.destination)}</td><td class="wrapcell">${esc(r.content)}</td><td class="nowrap">${esc(r.user_name)}</td><td>${esc(r.app)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing has been sent outside.</td></tr>'}
     </table></div>`;
