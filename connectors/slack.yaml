@@ -1,0 +1,19 @@
+connector: slack
+title: Slack
+description: Company Slack workspace. An outside service.
+operations:
+  list_messages:
+    description: Read recent messages in a channel.
+    roles: [analyst, senior_reviewer, support, support_lead]
+    params:
+      channel: {type: enum, values: [compliance, support, general], required: true}
+    returns: [ts, author, text]
+    audit: {min_retention_days: 30}
+  post_message:
+    description: Post a message to a channel.
+    roles: [analyst, senior_reviewer, support, support_lead]
+    params:
+      channel: {type: enum, values: [compliance, support, general], required: true}
+      text: {type: string, required: true}
+    changes_data: true
+    audit: {min_retention_days: 365}

@@ -1,0 +1,35 @@
+connector: refunds
+title: Refunds
+description: Refund requests from the payments database.
+operations:
+  list_refunds:
+    description: List refund requests, optionally filtered by status.
+    roles: [support, support_lead]
+    params:
+      status: {type: enum, values: [pending, issued, declined]}
+    returns: [id, customer, email, amount, currency, reason, status, requested_at, handled_by]
+    mask:
+      email: {style: email, show_full_to: [support_lead]}
+    audit: {min_retention_days: 90}
+  issue_refund:
+    description: Issue a pending refund.
+    roles: [support, support_lead]
+    params:
+      refund_id: {type: string, required: true}
+    record: refund_id
+    changes_data: true
+    rules:
+      - Refunds over 500 can only be issued by a support lead.
+      - Only a pending refund can be issued.
+    audit: {min_retention_days: 2555}
+  decline_refund:
+    description: Decline a pending refund.
+    roles: [support, support_lead]
+    params:
+      refund_id: {type: string, required: true}
+      reason: {type: string, required: true}
+    record: refund_id
+    changes_data: true
+    rules:
+      - Only a pending refund can be declined.
+    audit: {min_retention_days: 2555}

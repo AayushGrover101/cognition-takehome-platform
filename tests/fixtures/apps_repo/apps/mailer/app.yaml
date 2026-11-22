@@ -1,0 +1,3 @@
+title: Mailer
+access: [analyst]
+operations: [email.send_email]

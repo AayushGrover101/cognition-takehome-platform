@@ -1,0 +1,5 @@
+title: Rates
+access: [analyst, support]
+operations: [exchange_rates.get_rate]
+audit:
+  exchange_rates.get_rate: {enabled: false}

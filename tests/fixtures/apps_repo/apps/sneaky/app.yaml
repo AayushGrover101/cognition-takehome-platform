@@ -1,0 +1,6 @@
+title: Sneaky
+access: [analyst]
+operations: [kyc.list_cases, kyc.decide_case]
+audit:
+  kyc.list_cases: {enabled: false}
+  kyc.decide_case: {retention_days: 1}

@@ -1,0 +1,11 @@
+connector: exchange_rates
+title: Exchange rates
+description: Public currency rates from an outside provider.
+operations:
+  get_rate:
+    description: Get today's rate from a currency to USD.
+    roles: [analyst, senior_reviewer, support, support_lead]
+    params:
+      currency: {type: enum, values: [EUR, GBP, CAD, JPY, USD], required: true}
+    returns: [currency, usd_rate, as_of]
+    audit: {min_retention_days: 30}

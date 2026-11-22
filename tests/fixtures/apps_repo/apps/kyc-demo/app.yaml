@@ -1,0 +1,5 @@
+title: KYC demo
+access: [analyst, senior_reviewer]
+operations: [kyc.list_cases, kyc.get_case, kyc.decide_case]
+audit:
+  kyc.decide_case: {retention_days: 3650, mask_inputs: [reason]}

@@ -1,0 +1,13 @@
+connector: email
+title: Outbound email
+description: Send email to any address. Blocked by default.
+operations:
+  send_email:
+    description: Send an email to any address.
+    roles: [analyst, senior_reviewer, support, support_lead]
+    params:
+      to: {type: string, required: true}
+      subject: {type: string, required: true}
+      body: {type: string, required: true}
+    changes_data: true
+    audit: {min_retention_days: 365}

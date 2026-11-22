@@ -1,0 +1,25 @@
+# Starting policy. The admin page edits a live copy of this (stored in the platform database).
+
+roles: [analyst, senior_reviewer, support, support_lead, admin]
+
+# Stand-in for company single sign-on. In production, users and roles come from the identity provider.
+users:
+  - {id: priya,  name: Priya Shah,  role: analyst}
+  - {id: dana,   name: Dana Ortiz,  role: senior_reviewer}
+  - {id: marcus, name: Marcus Lee,  role: support}
+  - {id: lena,   name: Lena Novak,  role: support_lead}
+  - {id: sam,    name: Sam Kim,     role: admin}
+
+# Every connector is in exactly one group. An app cannot combine Internal and External connectors.
+connector_groups:
+  kyc: internal
+  refunds: internal
+  slack: external
+  exchange_rates: external
+  email: blocked
+
+# Individual operations an admin has switched off, as "connector.operation".
+blocked_operations: []
+
+audit:
+  refused_retention_days: 2555   # refused calls are always recorded and kept 7 years

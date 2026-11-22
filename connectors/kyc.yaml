@@ -1,0 +1,46 @@
+connector: kyc
+title: KYC cases
+description: Identity-verification cases from the compliance database.
+operations:
+  list_cases:
+    description: List KYC cases, optionally filtered by status.
+    roles: [analyst, senior_reviewer]
+    params:
+      status: {type: enum, values: [new, in_review, escalated, approved, rejected]}
+    returns: [id, name, country, risk, status, tax_id, date_of_birth, submitted_at, decided_by]
+    mask:
+      tax_id: {style: last4, show_full_to: [senior_reviewer]}
+      date_of_birth: {style: year, show_full_to: [senior_reviewer]}
+    audit: {min_retention_days: 90}
+  get_case:
+    description: Get one KYC case.
+    roles: [analyst, senior_reviewer]
+    params:
+      case_id: {type: string, required: true}
+    record: case_id
+    returns: [id, name, country, risk, status, tax_id, date_of_birth, submitted_at, decided_by, flags]
+    mask:
+      tax_id: {style: last4, show_full_to: [senior_reviewer]}
+      date_of_birth: {style: year, show_full_to: [senior_reviewer]}
+    audit: {min_retention_days: 90}
+  decide_case:
+    description: Approve or reject a KYC case.
+    roles: [analyst, senior_reviewer]
+    params:
+      case_id: {type: string, required: true}
+      decision: {type: enum, values: [approve, reject], required: true}
+      reason: {type: string}
+    record: case_id
+    changes_data: true
+    rules:
+      - High-risk and escalated cases can only be decided by a senior reviewer.
+      - A case that is already approved or rejected cannot be decided again.
+    audit: {min_retention_days: 2555}
+  escalate_case:
+    description: Escalate a KYC case to a senior reviewer.
+    roles: [analyst, senior_reviewer]
+    params:
+      case_id: {type: string, required: true}
+    record: case_id
+    changes_data: true
+    audit: {min_retention_days: 2555}
