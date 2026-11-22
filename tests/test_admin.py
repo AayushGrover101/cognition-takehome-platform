@@ -12,3 +12,11 @@ def test_admin_page_shows_apps_connectors_people_and_activity(gateway):
     assert "<strong>Compliance Officer</strong>: <code>kyc.decide_case</code>" in text
     assert "<strong>gdrive</strong>" in text and "Blocked" in text
     assert "Priya Shah" in text and "kyc.escalate_case" in text and "1 entries" in text
+
+
+def test_catalog_lists_roles_connectors_and_tools():
+    from gateway.catalog import catalog
+    c = catalog()
+    assert c["roles"]["kyc_analyst"] == "KYC Analyst" and c["admin_roles"] == ["platform_engineer"]
+    assert c["connectors"]["gdrive"] == {"group": "blocked"}
+    assert c["tools"]["kyc.decide_case"]["kind"] == "write" and "tax_id" in c["tools"]["kyc.get_case_full"]["returns"]

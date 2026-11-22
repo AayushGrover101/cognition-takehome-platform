@@ -79,3 +79,9 @@ that the gateway can insert into but not update.
 - **Connectors:** group, every tool with read/write and description, which apps use it.
 - **People and roles:** each person's role and the apps they can open.
 - **Recent activity:** the latest 50 audit entries across apps.
+
+## Section 5: catalogue for the apps repo
+
+`python3 -m gateway.catalog > ../cognition-takehome-apps/platform/catalog.json` exports roles, admin roles,
+connector groups and every tool (kind, inputs, returned fields, description). The apps repo's publish checks and
+Devin read it, so they know what exists without importing gateway code.
