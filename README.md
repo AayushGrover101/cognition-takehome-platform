@@ -70,3 +70,18 @@ audit_viewers: [compliance_officer]  # who can see this app's trail
 
 The database lives at `data/audit.db` (`AUDIT_DB` to change it). In production it would be an append-only store
 that the gateway can insert into but not update.
+
+## Section 4: admin page
+
+`/admin`, for `admin_roles` (Sam Kim, Platform Engineer). Read-only; changes go through pull requests.
+
+Apps, connectors and single tools are turned off in `switches.yaml` (name and reason), like infrastructure as code.
+The gateway re-reads it on every request: a turned-off app is hidden from the portal and returns 503, and calls to a
+turned-off connector or tool are refused with 503 (and audited if the tool is). Deleting the line turns it back on,
+which only restores what `app.yaml` grants. The file has its own CODEOWNERS line, so on-call can approve it quickly.
+
+- **Apps:** published or not (with the reasons), connectors and their groups, the tools each role actually gets,
+  how many write tools it can run, its opted-in reads, and a link to its audit trail.
+- **Connectors:** group, every tool with read/write and description, which apps use it.
+- **People and roles:** each person's role and the apps they can open.
+- **Recent activity:** the latest 50 audit entries across apps.

@@ -57,7 +57,8 @@ def test_shared_files(gateway):
 
 def test_me_returns_user_and_app_only_to_people_with_access(gateway):
     data = gateway("dana").get("/api/kyc-demo/_me").json()["data"]
-    assert data == {"user": {"name": "Dana Ortiz", "role": "compliance_officer", "title": "Compliance Officer"},
+    assert data == {"user": {"name": "Dana Ortiz", "role": "compliance_officer", "title": "Compliance Officer",
+                                 "admin": False},
                     "app": {"name": "kyc-demo", "title": "KYC demo"},
                     "tools": ["kyc.decide_case", "kyc.escalate_case", "kyc.get_case", "kyc.get_case_full",
                               "kyc.list_cases"],

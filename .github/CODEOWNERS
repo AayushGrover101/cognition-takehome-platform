@@ -4,3 +4,5 @@
 *                     @AayushGrover101
 /gateway/connectors/  @AayushGrover101
 /policy.yaml          @AayushGrover101
+# Turning things off or back on: add the on-call team here so these merge without waiting for the platform team.
+/switches.yaml        @AayushGrover101

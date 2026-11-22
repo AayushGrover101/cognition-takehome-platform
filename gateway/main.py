@@ -7,7 +7,7 @@ from starlette.applications import Starlette
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from . import audit, config, connectors
+from . import audit, config, connectors, switches
 
 WEB = Path(__file__).parent / "web"
 STATIC_TYPES = {".html", ".js", ".css", ".svg", ".png", ".jpg", ".ico", ".woff2"}
@@ -22,6 +22,14 @@ def current_user(request):
 
 def label(role):
     return config.ROLES.get(role, role)
+
+
+def is_admin(user):
+    return user["role"] in config.admin_roles()
+
+
+def admin_tag(user):
+    return '<span class="tag">Admin</span>' if is_admin(user) else ""
 
 
 def page(name, status=200, **values):
@@ -56,7 +64,7 @@ async def signin(request):
     current = me["id"] if me else ""
     options = "".join(
         f'<option value="{html.escape(u["id"])}"{" selected" if u["id"] == current else ""}>'
-        f'{html.escape(u["name"])} — {html.escape(label(u["role"]))}</option>'
+        f'{html.escape(u["name"])} — {html.escape(label(u["role"]))}{" · Admin" if is_admin(u) else ""}</option>'
         for u in config.users().values()
     )
     target = config.load_apps().get(nxt.split("/")[2]) if nxt.startswith("/apps/") and nxt.count("/") >= 2 else None
@@ -74,19 +82,23 @@ async def portal(request):
     if not user:
         return RedirectResponse("/signin", status_code=303)
     apps = [app for app in config.load_apps().values() if can_open(user, app)]
+    off = switches.off("app")
     arrow = ('<svg class="go" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" '
              'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>')
     cards = "".join(
-        f'<a class="app" href="/apps/{html.escape(app["name"])}/"><span class="icon">{html.escape(initials(app["title"]))}</span>'
+        (f'<div class="app off" aria-disabled="true">' if app["name"] in off else f'<a class="app" href="/apps/{html.escape(app["name"])}/">')
+        + f'<span class="icon">{html.escape(initials(app["title"]))}</span>'
         f'<span class="text"><div class="title">{html.escape(app["title"])}</div>'
-        f'<div class="desc">{html.escape(str(app.get("description", "")))}</div></span>{arrow}</a>'
+        f'<div class="desc">{html.escape(str(app.get("description", "")))}</div></span>'
+        + ('<span class="tag">Turned off</span></div>' if app["name"] in off else f'{arrow}</a>')
         for app in apps
     )
     cards = f'<div class="apps">{cards}</div>' if apps else (
         '<div class="empty"><strong>No apps yet</strong>Nothing is available for your role. '
         'Ask your team lead if you expected to see an app here.</div>')
     count = f'{len(apps)} app{"" if len(apps) == 1 else "s"}'
-    return page("portal.html", cards=cards, count=count, first=html.escape(user["name"].split()[0]), initials=html.escape(initials(user["name"])),
+    admin = '<a class="btn ghost" href="/admin">Admin</a><span class="divider"></span>' if is_admin(user) else ""
+    return page("portal.html", admin=admin, tag=admin_tag(user), cards=cards, count=count, first=html.escape(user["name"].split()[0]), initials=html.escape(initials(user["name"])),
                 user=html.escape(user["name"]), role=html.escape(label(user["role"])))
 
 
@@ -132,6 +144,8 @@ async def serve_app(request):
     if user["role"] not in app["access"]:
         return notice("You don't have access to this app",
                       [f"Signed in as {user['name']} ({label(user['role'])})."], 403)
+    if name in switches.off("app"):
+        return notice("This app is turned off", [switches.why("app", name, app["title"])], 503)
     target = static_file(config.APPS_DIR / "apps" / name, rel)
     if not target:
         return notice("Not found", [rel], 404)
@@ -179,8 +193,10 @@ async def me(request):
     app = config.load_apps().get(request.path_params["app"])
     if not app or not can_open(user, app):
         return JSONResponse({"ok": False, "error": "You don't have access to this app"}, status_code=403)
+    if app["name"] in switches.off("app"):
+        return refuse(503, switches.why("app", app["name"], app["title"]))
     return JSONResponse({"ok": True, "data": {
-        "user": {"name": user["name"], "role": user["role"], "title": label(user["role"])},
+        "user": {"name": user["name"], "role": user["role"], "title": label(user["role"]), "admin": is_admin(user)},
         "app": {"name": app["name"], "title": app["title"]},
         "tools": config.tools_for(app, user["role"]),
         "audit_trail": f"/audit/{app['name']}" if config.can_view_audit(user, app) else None,
@@ -214,6 +230,11 @@ async def call_tool(request):
         error = f"Your role ({label(user['role'])}) can't use {name} in this app"
         log("refused", error)
         return refuse(403, error)
+    for kind, key, title in (("app", app["name"], app["title"]), ("connector", tool.connector, None), ("tool", name, None)):
+        error = switches.why(kind, key, title)
+        if error:
+            log("refused", error)
+            return refuse(503, error)
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
         return refuse(415, "Send inputs as JSON")
     try:
@@ -241,7 +262,7 @@ def audit_rows(rows, show_app=False):
         outcome = f'<span class="tag {"allowed" if row["outcome"] == "ok" else "refused"}">' \
                   f'{"OK" if row["outcome"] == "ok" else "Refused"}</span>'
         detail = f'<div class="note">{html.escape(row["detail"])}</div>' if row["detail"] else ""
-        app_cell = f'<td><a href="/audit/{html.escape(row["app"])}">{html.escape(row["app"])}</a></td>' if show_app else ""
+        app_cell = ("" if not show_app else f'<td><a href="/audit/{html.escape(row["app"])}">{html.escape(row["app"])}</a></td>')
         return (f'<tr><td class="num">{html.escape(row["at"].replace("T", " ").rstrip("Z"))}</td>{app_cell}'
                 f'<td>{html.escape(row["user_name"])}<div class="note">{html.escape(label(row["role"]))}</div></td>'
                 f'<td><code>{html.escape(row["tool"])}</code> <span class="tag">{html.escape(row["kind"])}</span></td>'
@@ -253,7 +274,7 @@ def audit_rows(rows, show_app=False):
 
 
 def topbar(user, crumbs):
-    return page_fragment("topbar.html", crumbs=crumbs, initials=html.escape(initials(user["name"])),
+    return page_fragment("topbar.html", crumbs=crumbs, tag=admin_tag(user), initials=html.escape(initials(user["name"])),
                          user=html.escape(user["name"]), role=html.escape(label(user["role"])))
 
 
@@ -313,6 +334,91 @@ async def csp_report(request):
     return Response(status_code=204)
 
 
+# ---------- admin page (platform engineers) ----------
+
+def tag(text, cls=""):
+    return f'<span class="tag {cls}">{html.escape(text)}</span>'
+
+
+async def admin_page(request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/signin?next=%2Fadmin", status_code=303)
+    if user["role"] not in config.admin_roles():
+        return notice("You can't open the admin page",
+                      [f"Signed in as {user['name']} ({label(user['role'])}).", "Only platform admins can."], 403)
+    apps, counts = config.load_apps(), audit.counts()
+    off_apps, off_conns, off_tools = switches.off("app"), switches.off("connector"), switches.off("tool")
+
+    def state(reason):
+        return (f'{tag("Turned off", "refused")} <span class="note">{html.escape(reason)}</span>' if reason else
+                tag("On", "published")) + '<div class="note">Change in switches.yaml</div>'
+
+    people = "".join(f'<tr><td>{html.escape(u["name"])}</td><td>{html.escape(label(u["role"]))}</td>'
+                     f'<td><code>{html.escape(u["role"])}</code></td>'
+                     f'<td>{", ".join(html.escape(a["title"]) for a in apps.values() if can_open(u, a)) or "—"}</td></tr>'
+                     for u in config.users().values())
+
+    def connector_row(name):
+        group = config.connector_group(name)
+        tools = "".join(f'<div><code>{html.escape(t.name)}</code> {tag(t.kind)}'
+                        f'{" " + tag("Turned off", "refused") if t.name in off_tools else ""} '
+                        f'<span class="note">{html.escape(off_tools.get(t.name) or t.description)}</span></div>'
+                        for t in connectors.TOOLS.values() if t.connector == name)
+        used = ", ".join(html.escape(a["title"]) for a in apps.values() if name in a["connectors"]) or "—"
+        control = state(off_conns.get(name)) if group != "blocked" else '<span class="note">Blocked by policy</span>'
+        return (f'<tr><td><strong>{html.escape(name)}</strong></td><td>{tag(group.capitalize(), group)}</td><td>{tools}</td>'
+                f'<td>{used}</td><td>{control}</td></tr>')
+    conns = "".join(connector_row(c) for c in connectors.connectors())
+
+    def app_parts(a):
+        name = html.escape(a["name"])
+        status = (tag("Not published", "refused") if a["problems"] else
+                  tag("Turned off", "refused") if a["name"] in off_apps else tag("Published", "published"))
+        problems = "".join(f'<div class="note">{html.escape(p)}</div>' for p in a["problems"])
+        grants = "".join(
+            f'<div><strong>{html.escape(label(r))}</strong>: '
+            f'{", ".join(f"<code>{html.escape(t)}</code>" + (" (turned off)" if t in off_tools else "") for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
+            for r in a["access"] if r in config.ROLES) if not a["problems"] else '<span class="note">—</span>'
+        granted = [] if a["problems"] else sorted({t for r in a["access"] for t in config.tools_for(a, r)})
+        # Every tool on the app's connectors that the gateway would log, including refused attempts at ungranted ones.
+        audited = [] if a["problems"] else [t for t in connectors.TOOLS.values()
+                                            if t.connector in a["connectors"] and config.audited(a, t)]
+        listed = "".join(f'<div><code>{html.escape(t.name)}</code> <span class="note">'
+                         f'{t.kind}{"" if t.name in granted else "; no role granted, refusals only"}</span></div>' for t in audited)
+        conns = " ".join(tag(c, config.connector_group(c)) for c in a["connectors"]) or "—"
+        viewers = ", ".join(html.escape(label(str(r))) for r in a["audit_viewers"]) or "none"
+        n = counts.get(a["name"], 0)
+        row = (f'<tr class="clickable" data-dialog="app-{name}" tabindex="0">'
+               f'<td><strong>{html.escape(a["title"])}</strong><div class="note">{name}</div></td>'
+               f'<td>{status}</td><td>{conns}</td>'
+               f'<td>{len(audited)} tool{"s" if len(audited) != 1 else ""}</td><td class="num">{n}</td></tr>')
+
+        def item(title, body):
+            return f'<div class="item"><div class="item-label">{title}</div><div>{body}</div></div>'
+        dialog = (f'<dialog id="app-{name}" class="modal"><div class="modal-head"><div><p class="eyebrow">{name}</p>'
+                  f'<h2>{html.escape(a["title"])}</h2></div>{status}'
+                  f'<button class="btn ghost" data-close aria-label="Close">Close</button></div>'
+                  + (item("Why it isn't published", problems) if problems else
+                     item("State", state(off_apps.get(a["name"]))))
+                  + item("Description", html.escape(a.get("description") or "—"))
+                  + item("Connectors", conns)
+                  + item("Tools per role", grants)
+                  + item("Audited tools", listed or '<span class="note">Nothing audited</span>')
+                  + item("Audit retention", f'{a["audit_retention_days"]} days' if a["audit_retention_days"] else "Not set, entries are kept")
+                  + item("Can view the trail", f'{viewers}, and platform admins')
+                  + f'<div class="section-head gap"><span>Latest calls</span>'
+                  f'<a href="/audit/{name}">Search all {n} entries →</a></div>'
+                  + audit_rows(audit.entries(a["name"], limit=10)) + '</dialog>')
+        return row, dialog
+    parts = [app_parts(a) for a in apps.values()]
+    app_rows, dialogs = "".join(r for r, _ in parts), "".join(d for _, d in parts)
+
+    crumbs = '<span class="crumb">/</span><span class="here">Admin</span>'
+    return page("admin.html", topbar=topbar(user, crumbs), people=people, connectors=conns, apps=app_rows, dialogs=dialogs,
+                activity=audit_rows(audit.entries(limit=50), show_app=True))
+
+
 def create_app():
     return Starlette(routes=[
         Route("/", portal),
@@ -326,6 +432,7 @@ def create_app():
         Route("/api/{app}/{tool}", call_tool, methods=["POST"]),
         Route("/csp-report", csp_report, methods=["POST"]),
         Route("/audit/{app}", audit_page),
+        Route("/admin", admin_page),
     ])
 
 

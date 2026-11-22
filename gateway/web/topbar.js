@@ -16,7 +16,7 @@
     const trail = me.audit_trail ? `<a class="btn ghost" href="${esc(me.audit_trail)}">Audit trail</a><span class="divider"></span>` : '';
     bar.insertAdjacentHTML('beforeend', `<span class="spacer"></span>${trail}
       <div class="who"><span class="avatar">${esc(initials(me.user.name))}</span><span class="name">${esc(me.user.name)}</span>
-      <span class="role">${esc(me.user.title)}</span></div><span class="divider"></span>
+      <span class="role">${esc(me.user.title)}</span>${me.user.admin ? '<span class="tag">Admin</span>' : ''}</div><span class="divider"></span>
       <a class="btn ghost" href="/signout?next=${here}">Sign out</a>`);
   }).catch(() => {});
 })();

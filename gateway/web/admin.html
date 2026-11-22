@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · Internal tools</title><link rel="stylesheet" href="/web/base.css"><script src="/web/admin.js" defer></script></head>
+<body>
+{{topbar}}
+<main class="wrap wide">
+<p class="eyebrow">Platform</p>
+<h1>Admin</h1>
+<p class="sub">Everything the gateway enforces, in one place. Everything here changes through pull requests: grants in
+each app.yaml, and turning apps, connectors or tools off in switches.yaml.</p>
+
+<div class="section-head"><span>Apps</span><span>From each app.yaml. Click an app for its grants, audit settings and calls</span></div>
+<table class="log"><thead><tr><th>App</th><th>Status</th><th>Connectors</th><th>Audited</th><th class="num">Audit entries</th></tr></thead><tbody>{{apps}}</tbody></table>
+{{dialogs}}
+
+<div class="section-head gap"><span>Connectors</span><span>Groups from policy.yaml; tools from gateway/connectors</span></div>
+<table class="log"><thead><tr><th>Connector</th><th>Group</th><th>Tools</th><th>Used by</th><th>State</th></tr></thead><tbody>{{connectors}}</tbody></table>
+
+<div class="section-head gap"><span>People and roles</span><span>From the identity provider (policy.yaml in the demo)</span></div>
+<table class="log"><thead><tr><th>Person</th><th>Role</th><th>Role id</th><th>Can open</th></tr></thead><tbody>{{people}}</tbody></table>
+
+<div class="section-head gap"><span>Recent activity</span><span>Latest 50 audit entries across apps</span></div>
+{{activity}}
+</main>
+</body></html>
