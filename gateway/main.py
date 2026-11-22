@@ -326,8 +326,9 @@ async def admin_page(request):
         grants = "".join(
             f'<div><strong>{html.escape(label(r))}</strong>: '
             f'{", ".join(f"<code>{html.escape(t)}</code>" for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
-            for r in a["access"] if r in config.ROLES) or "—"
-        writes = [t for r in a["access"] for t in config.tools_for(a, r) if connectors.TOOLS[t].kind == "write"]
+            for r in a["access"] if r in config.ROLES) if not a["problems"] else "—"
+        writes = [] if a["problems"] else [
+            t for r in a["access"] for t in config.tools_for(a, r) if connectors.TOOLS[t].kind == "write"]
         reads = ", ".join(html.escape(x) for x in a["audit_reads"]) or "none"
         trail = f'<a href="/audit/{html.escape(a["name"])}">{counts.get(a["name"], 0)} entries</a>'
         conns = " ".join(tag(c, config.connector_group(c)) for c in a["connectors"]) or "—"
