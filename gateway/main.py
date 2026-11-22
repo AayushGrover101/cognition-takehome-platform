@@ -144,7 +144,7 @@ async def serve_app(request):
     if user["role"] not in app["access"]:
         return notice("You don't have access to this app",
                       [f"Signed in as {user['name']} ({label(user['role'])})."], 403)
-    if switches.is_off("app", name):
+    if name in switches.off("app"):
         return notice("This app is turned off", [switches.why("app", name, app["title"])], 503)
     target = static_file(config.APPS_DIR / "apps" / name, rel)
     if not target:
@@ -193,7 +193,7 @@ async def me(request):
     app = config.load_apps().get(request.path_params["app"])
     if not app or not can_open(user, app):
         return JSONResponse({"ok": False, "error": "You don't have access to this app"}, status_code=403)
-    if switches.is_off("app", app["name"]):
+    if app["name"] in switches.off("app"):
         return refuse(503, switches.why("app", app["name"], app["title"]))
     return JSONResponse({"ok": True, "data": {
         "user": {"name": user["name"], "role": user["role"], "title": label(user["role"]), "admin": is_admin(user)},
@@ -230,9 +230,9 @@ async def call_tool(request):
         error = f"Your role ({label(user['role'])}) can't use {name} in this app"
         log("refused", error)
         return refuse(403, error)
-    for kind, key, title in (("app", app["name"], app["title"]), ("connector", tool.connector, None)):
-        if switches.is_off(kind, key):
-            error = switches.why(kind, key, title)
+    for kind, key, title in (("app", app["name"], app["title"]), ("connector", tool.connector, None), ("tool", name, None)):
+        error = switches.why(kind, key, title)
+        if error:
             log("refused", error)
             return refuse(503, error)
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
@@ -262,8 +262,7 @@ def audit_rows(rows, show_app=False):
         outcome = f'<span class="tag {"allowed" if row["outcome"] == "ok" else "refused"}">' \
                   f'{"OK" if row["outcome"] == "ok" else "Refused"}</span>'
         detail = f'<div class="note">{html.escape(row["detail"])}</div>' if row["detail"] else ""
-        app_cell = ("" if not show_app else '<td>Platform</td>' if row["app"] == switches.PLATFORM_TRAIL else
-                    f'<td><a href="/audit/{html.escape(row["app"])}">{html.escape(row["app"])}</a></td>')
+        app_cell = ("" if not show_app else f'<td><a href="/audit/{html.escape(row["app"])}">{html.escape(row["app"])}</a></td>')
         return (f'<tr><td class="num">{html.escape(row["at"].replace("T", " ").rstrip("Z"))}</td>{app_cell}'
                 f'<td>{html.escape(row["user_name"])}<div class="note">{html.escape(label(row["role"]))}</div></td>'
                 f'<td><code>{html.escape(row["tool"])}</code> <span class="tag">{html.escape(row["kind"])}</span></td>'
@@ -346,17 +345,11 @@ async def admin_page(request):
         return notice("You can't open the admin page",
                       [f"Signed in as {user['name']} ({label(user['role'])}).", "Only platform admins can."], 403)
     apps, counts = config.load_apps(), audit.counts()
-    off_apps, off_conns = switches.off("app"), switches.off("connector")
+    off_apps, off_conns, off_tools = switches.off("app"), switches.off("connector"), switches.off("tool")
 
-    def switch_form(kind, name, s):
-        fields = f'<input type="hidden" name="kind" value="{kind}"><input type="hidden" name="name" value="{html.escape(name)}">'
-        if s:
-            return (f'<form class="switch" method="post" action="/admin/switch">{fields}<input type="hidden" name="enabled" value="1">'
-                    f'<span class="note">Off since {html.escape(s["at"].replace("T", " ").rstrip("Z"))} UTC, by {html.escape(s["by_name"])}: '
-                    f'{html.escape(s["reason"])}</span><button class="btn" type="submit">Turn back on</button></form>')
-        return (f'<form class="switch" method="post" action="/admin/switch">{fields}<input type="hidden" name="enabled" value="0">'
-                f'<input name="reason" required maxlength="200" placeholder="Reason, e.g. incident INC-142" aria-label="Reason">'
-                f'<button class="btn danger" type="submit">Turn off</button></form>')
+    def state(reason):
+        return (f'{tag("Turned off", "refused")} <span class="note">{html.escape(reason)}</span>' if reason else
+                tag("On", "published")) + '<div class="note">Change in switches.yaml</div>'
 
     people = "".join(f'<tr><td>{html.escape(u["name"])}</td><td>{html.escape(label(u["role"]))}</td>'
                      f'<td><code>{html.escape(u["role"])}</code></td>'
@@ -365,13 +358,14 @@ async def admin_page(request):
 
     def connector_row(name):
         group = config.connector_group(name)
-        tools = "".join(f'<div><code>{html.escape(t.name)}</code> {tag(t.kind)} <span class="note">{html.escape(t.description)}</span></div>'
+        tools = "".join(f'<div><code>{html.escape(t.name)}</code> {tag(t.kind)}'
+                        f'{" " + tag("Turned off", "refused") if t.name in off_tools else ""} '
+                        f'<span class="note">{html.escape(off_tools.get(t.name) or t.description)}</span></div>'
                         for t in connectors.TOOLS.values() if t.connector == name)
         used = ", ".join(html.escape(a["title"]) for a in apps.values() if name in a["connectors"]) or "—"
-        state = (tag("Turned off", "refused") if name in off_conns else "") if group != "blocked" else ""
-        control = switch_form("connector", name, off_conns.get(name)) if group != "blocked" else '<span class="note">Blocked by policy</span>'
-        return (f'<tr><td><strong>{html.escape(name)}</strong> {state}</td><td>{tag(group.title(), group)}</td><td>{tools}</td>'
-                f'<td>{used}</td><td class="control">{control}</td></tr>')
+        control = state(off_conns.get(name)) if group != "blocked" else '<span class="note">Blocked by policy</span>'
+        return (f'<tr><td><strong>{html.escape(name)}</strong></td><td>{tag(group.title(), group)}</td><td>{tools}</td>'
+                f'<td>{used}</td><td>{control}</td></tr>')
     conns = "".join(connector_row(c) for c in connectors.connectors())
 
     def app_parts(a):
@@ -381,7 +375,7 @@ async def admin_page(request):
         problems = "".join(f'<div class="note">{html.escape(p)}</div>' for p in a["problems"])
         grants = "".join(
             f'<div><strong>{html.escape(label(r))}</strong>: '
-            f'{", ".join(f"<code>{html.escape(t)}</code>" for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
+            f'{", ".join(f"<code>{html.escape(t)}</code>" + (" (turned off)" if t in off_tools else "") for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
             for r in a["access"] if r in config.ROLES) if not a["problems"] else '<span class="note">—</span>'
         granted = [] if a["problems"] else sorted({t for r in a["access"] for t in config.tools_for(a, r)})
         # Every tool on the app's connectors that the gateway would log, including refused attempts at ungranted ones.
@@ -404,7 +398,7 @@ async def admin_page(request):
                   f'<h2>{html.escape(a["title"])}</h2></div>{status}'
                   f'<button class="btn ghost" data-close aria-label="Close">Close</button></div>'
                   + (item("Why it isn't published", problems) if problems else
-                     item("Switch", switch_form("app", a["name"], off_apps.get(a["name"]))))
+                     item("State", state(off_apps.get(a["name"]))))
                   + item("Description", html.escape(a.get("description") or "—"))
                   + item("Connectors", conns)
                   + item("Tools per role", grants)
@@ -423,30 +417,6 @@ async def admin_page(request):
                 activity=audit_rows(audit.entries(limit=50), show_app=True))
 
 
-async def admin_switch(request):
-    """Turn an app or connector off or on. Only a form on the admin page itself may do this: app pages can't
-    submit forms, and a fetch() from an app's code isn't a document navigation, so it's refused."""
-    user = current_user(request)
-    if not user or not is_admin(user):
-        return notice("Only platform admins can turn apps and connectors on or off", [], 403)
-    if request.headers.get("sec-fetch-site", "same-origin") != "same-origin" or \
-            request.headers.get("sec-fetch-dest", "document") != "document" or \
-            urlsplit(request.headers.get("referer", "/admin")).path != "/admin":
-        return notice("Use the admin page to change switches", [], 403)
-    form = await request.form()
-    kind, name, enabled = form.get("kind"), form.get("name", ""), form.get("enabled") == "1"
-    reason = " ".join(str(form.get("reason", "")).split())[:200]
-    known = config.load_apps() if kind == "app" else {c: 1 for c in connectors.connectors()} if kind == "connector" else {}
-    if name not in known:
-        return notice("Nothing to switch", [f"There is no {kind} called {name}."], 404)
-    if not enabled and not reason:
-        return notice("Give a reason", ["Turning something off needs a reason; it goes in the platform audit trail."], 400)
-    if bool(switches.is_off(kind, name)) == (not enabled):
-        return RedirectResponse("/admin", status_code=303)
-    switches.flip(kind, name, enabled, user, reason or "turned back on")
-    return RedirectResponse("/admin", status_code=303)
-
-
 def create_app():
     return Starlette(routes=[
         Route("/", portal),
@@ -461,7 +431,6 @@ def create_app():
         Route("/csp-report", csp_report, methods=["POST"]),
         Route("/audit/{app}", audit_page),
         Route("/admin", admin_page),
-        Route("/admin/switch", admin_switch, methods=["POST"]),
     ])
 
 

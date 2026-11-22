@@ -1,56 +1,72 @@
-from gateway import audit, switches
+import shutil
 
-ADMIN_FORM = {"sec-fetch-site": "same-origin", "sec-fetch-dest": "document", "referer": "http://testserver/admin"}
+import pytest
+import yaml
+
+from gateway import audit, config, connectors, switches
 
 
-def flip(client, kind, name, enabled, reason="", headers=ADMIN_FORM):
-    return client.post("/admin/switch", data={"kind": kind, "name": name, "enabled": "1" if enabled else "0",
-                                              "reason": reason}, headers=headers)
+@pytest.fixture()
+def turn_off(tmp_path, monkeypatch):
+    def write(**sections):
+        f = tmp_path / "switches.yaml"
+        f.write_text(yaml.safe_dump(sections))
+        monkeypatch.setenv("SWITCHES_FILE", str(f))
+    return write
 
 
 def escalate(client):
     return client.post("/api/kyc-demo/kyc.escalate_case", json={"case_id": "KYC-1001", "reason": "PEP"})
 
 
-def test_turning_an_app_off_blocks_it_everywhere_and_is_recorded(gateway):
-    sam, dana = gateway("sam"), gateway("dana")
-    assert flip(sam, "app", "kyc-demo", False, "Incident INC-142").status_code == 303
+def test_a_turned_off_app_is_blocked_everywhere(gateway, turn_off):
+    turn_off(apps={"kyc-demo": "Incident INC-142"})
+    dana = gateway("dana")
     assert dana.get("/apps/kyc-demo/").status_code == 503
     assert "Turned off" in dana.get("/").text and 'href="/apps/kyc-demo/"' not in dana.get("/").text
     r = escalate(dana)
     assert r.status_code == 503 and "Incident INC-142" in r.json()["error"]
     assert audit.entries("kyc-demo")[0]["outcome"] == "refused"
-    [change] = audit.entries(switches.PLATFORM_TRAIL)
-    assert change["tool"] == "admin.turn_off_app" and change["inputs"] == {"app": "kyc-demo", "reason": "Incident INC-142"}
-    assert "Turn back on" in sam.get("/admin").text
-    flip(sam, "app", "kyc-demo", True)
+    assert "Incident INC-142" in gateway("sam").get("/admin").text
+    turn_off()
     assert dana.get("/apps/kyc-demo/").status_code == 200 and escalate(dana).status_code == 200
 
 
-def test_turning_a_connector_off_refuses_its_tools(gateway):
-    sam, dana = gateway("sam"), gateway("dana")
-    flip(sam, "connector", "kyc", False, "Vendor outage")
+def test_a_turned_off_connector_or_tool_refuses_calls(gateway, turn_off):
+    dana = gateway("dana")
+    turn_off(connectors={"kyc": "Vendor outage"})
     r = escalate(dana)
-    assert r.status_code == 503 and "The kyc connector is turned off" in r.json()["error"]
+    assert r.status_code == 503 and "The kyc connector is turned off: Vendor outage" in r.json()["error"]
     assert dana.get("/apps/kyc-demo/").status_code == 200
-    flip(sam, "connector", "kyc", True)
-    assert escalate(dana).status_code == 200
+    turn_off(tools={"kyc.escalate_case": "Escalation queue migration"})
+    assert escalate(dana).status_code == 503
+    assert dana.post("/api/kyc-demo/kyc.get_case", json={"case_id": "KYC-1001"}).status_code == 200
+    assert "Escalation queue migration" in gateway("sam").get("/admin").text
 
 
-def test_only_admins_using_the_admin_page_can_flip_switches(gateway):
-    assert flip(gateway("dana"), "app", "kyc-demo", False, "x").status_code == 403
-    sam = gateway("sam")
-    from_app = {"sec-fetch-site": "same-origin", "sec-fetch-dest": "empty", "referer": "http://testserver/apps/kyc-demo/"}
-    assert flip(sam, "app", "kyc-demo", False, "x", headers=from_app).status_code == 403
-    assert flip(sam, "app", "kyc-demo", False, "").status_code == 400
-    assert flip(sam, "app", "nope", False, "x").status_code == 404
-    assert switches.off("app") == {}
+def test_the_admin_page_has_no_switch_buttons(gateway):
+    assert "<form" not in gateway("sam").get("/admin").text
+    assert gateway("sam").post("/admin/switch", data={"kind": "app", "name": "kyc-demo"}).status_code in (404, 405)
 
 
-def test_reserved_names_are_not_apps(tmp_path, monkeypatch):
-    import shutil
-    from gateway import config
+@pytest.mark.parametrize("data", [["kyc"], {"apps": ["kyc-demo"]}, {"apps": {"kyc-demo": ""}}, {"connectors": {"kyc": None}},
+                                  {"widgets": {}}])
+def test_a_malformed_file_fails_closed(gateway, tmp_path, monkeypatch, data):
+    (tmp_path / "bad.yaml").write_text(yaml.safe_dump(data))
+    monkeypatch.setenv("SWITCHES_FILE", str(tmp_path / "bad.yaml"))
+    with pytest.raises(ValueError):
+        switches.load()
+
+
+def test_the_repos_switches_file_is_valid_and_names_real_connectors_and_tools(monkeypatch):
+    monkeypatch.delenv("SWITCHES_FILE", raising=False)
+    data = switches.load()
+    assert set(data["connectors"]) <= set(connectors.connectors())
+    assert set(data["tools"]) <= set(connectors.TOOLS)
+
+
+def test_invalid_folder_names_are_not_apps(tmp_path, monkeypatch):
     shutil.copytree(config.APPS_DIR, tmp_path / "repo")
-    shutil.copytree(tmp_path / "repo" / "apps" / "kyc-demo", tmp_path / "repo" / "apps" / switches.PLATFORM_TRAIL)
+    shutil.copytree(tmp_path / "repo" / "apps" / "kyc-demo", tmp_path / "repo" / "apps" / "_hidden")
     monkeypatch.setattr(config, "APPS_DIR", tmp_path / "repo")
-    assert switches.PLATFORM_TRAIL not in config.load_apps() and "kyc-demo" in config.load_apps()
+    assert "_hidden" not in config.load_apps() and "kyc-demo" in config.load_apps()
