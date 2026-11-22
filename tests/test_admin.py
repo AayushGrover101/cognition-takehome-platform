@@ -15,6 +15,14 @@ def test_admin_page_shows_apps_connectors_people_and_activity(gateway):
     assert "Priya Shah" in text and "kyc.escalate_case" in text and '<td class="num">1</td>' in text and 'data-dialog="app-kyc-demo"' in text
 
 
+def test_catalog_lists_roles_connectors_and_tools():
+    from gateway.catalog import catalog
+    c = catalog()
+    assert c["roles"]["kyc_analyst"] == "KYC Analyst" and c["admin_roles"] == ["platform_engineer"]
+    assert c["connectors"]["gdrive"] == {"group": "blocked"}
+    assert c["tools"]["kyc.decide_case"]["kind"] == "write" and "tax_id" in c["tools"]["kyc.get_case_full"]["returns"]
+
+
 def test_admins_are_marked_in_sign_in_and_top_bar(gateway):
     signin = gateway().get("/signin").text
     assert "Sam Kim — Platform Engineer · Admin" in signin and "Priya Shah — KYC Analyst</option>" in signin
@@ -54,3 +62,11 @@ def test_malformed_audit_viewers_dont_break_the_admin_page(gateway, monkeypatch)
     apps["kyc-demo"]["audit_viewers"] = [None, 3]
     monkeypatch.setattr(config, "load_apps", lambda: apps)
     assert gateway("sam").get("/admin").status_code == 200
+
+
+def test_apps_are_high_risk_unless_listed_in_app_risk_yaml(gateway, monkeypatch):
+    from gateway import catalog, config
+    assert config.app_risk("kyc-demo") == "high" and catalog.catalog()["app_risk"] == {"default": "high", "low": []}
+    assert "Every change needs an engineer" in gateway("sam").get("/admin").text
+    monkeypatch.setattr(config, "low_risk_apps", lambda: ["kyc-demo"])
+    assert config.app_risk("kyc-demo") == "low" and "Code-only changes publish without review" in gateway("sam").get("/admin").text
