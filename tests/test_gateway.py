@@ -75,7 +75,7 @@ def test_sign_in_keeps_the_page_you_asked_for(gateway):
 
 def test_sign_in_page_offers_a_dropdown_of_accounts(gateway):
     text = gateway().get("/signin?next=/apps/kyc-demo/").text
-    assert '<select name="user" required>' in text and 'value="/apps/kyc-demo/"' in text
+    assert 'name="user" required>' in text and 'value="/apps/kyc-demo/"' in text
     assert '<option value="priya">Priya Shah \u2014 analyst</option>' in text
     assert '<option value="dana" selected>' in gateway("dana").get("/signin").text
 

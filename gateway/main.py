@@ -38,7 +38,7 @@ def initials(text):
 
 def notice(title, lines, status):
     items = "".join(f"<li>{html.escape(line)}</li>" for line in lines)
-    return page("notice.html", status, title=html.escape(title), items=items)
+    return page("notice.html", status, title=html.escape(title), items=items, code=str(status))
 
 
 def safe_next(value):
@@ -76,18 +76,19 @@ async def portal(request):
     if not user:
         return RedirectResponse("/signin", status_code=303)
     apps = [app for app in config.load_apps().values() if can_open(user, app)]
+    arrow = ('<svg class="go" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" '
+             'fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>')
     cards = "".join(
-        f'<a class="card" href="/apps/{html.escape(app["name"])}/"><span class="icon">{html.escape(initials(app["title"]))}</span>'
-        f'<div><div class="title">{html.escape(app["title"])}</div>'
-        f'<div class="desc">{html.escape(str(app.get("description", "")))}</div></div>'
-        f'<span class="open">Open app →</span></a>'
+        f'<a class="app" href="/apps/{html.escape(app["name"])}/"><span class="icon">{html.escape(initials(app["title"]))}</span>'
+        f'<span class="text"><div class="title">{html.escape(app["title"])}</div>'
+        f'<div class="desc">{html.escape(str(app.get("description", "")))}</div></span>{arrow}</a>'
         for app in apps
     )
-    cards = f'<div class="cards">{cards}</div>' if apps else (
-        '<div class="empty"><strong>No apps yet</strong>No apps are available for your role. '
-        'Ask your team lead if you expected to see one.</div>')
+    cards = f'<div class="apps">{cards}</div>' if apps else (
+        '<div class="empty"><strong>No apps yet</strong>Nothing is available for your role. '
+        'Ask your team lead if you expected to see an app here.</div>')
     count = f'{len(apps)} app{"" if len(apps) == 1 else "s"}'
-    return page("portal.html", cards=cards, count=count, initials=html.escape(initials(user["name"])),
+    return page("portal.html", cards=cards, count=count, first=html.escape(user["name"].split()[0]), initials=html.escape(initials(user["name"])),
                 user=html.escape(user["name"]), role=html.escape(label(user["role"])))
 
 
