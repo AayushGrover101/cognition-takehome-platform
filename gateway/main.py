@@ -363,7 +363,7 @@ async def admin_page(request):
                          f'{"write, always" if t.kind == "write" else "read, listed in audit_reads"}'
                          f'{"" if t.name in granted else "; no role granted, refusals only"}</span></div>' for t in audited)
         conns = " ".join(tag(c, config.connector_group(c)) for c in a["connectors"]) or "—"
-        viewers = ", ".join(html.escape(label(r)) for r in a["audit_viewers"]) or "none"
+        viewers = ", ".join(html.escape(label(str(r))) for r in a["audit_viewers"]) or "none"
         n = counts.get(a["name"], 0)
         row = (f'<tr class="clickable" data-dialog="app-{name}" tabindex="0">'
                f'<td><strong>{html.escape(a["title"])}</strong><div class="note">{name}</div></td>'
