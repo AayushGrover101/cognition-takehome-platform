@@ -6,17 +6,21 @@
 <main class="wrap wide">
 <p class="eyebrow">Platform</p>
 <h1>Admin</h1>
-<p class="sub">Everything the gateway enforces, in one place. Read-only: changes go through pull requests.</p>
+<p class="sub">Everything the gateway enforces, in one place. Grants change through pull requests; here you can only
+turn an app or connector off in an emergency, and back on.</p>
 
 <div class="section-head"><span>Apps</span><span>From each app.yaml. Click an app for its grants, audit settings and calls</span></div>
 <table class="log"><thead><tr><th>App</th><th>Status</th><th>Connectors</th><th>Audited</th><th class="num">Audit entries</th></tr></thead><tbody>{{apps}}</tbody></table>
 {{dialogs}}
 
 <div class="section-head gap"><span>Connectors</span><span>Groups from policy.yaml; tools from gateway/connectors</span></div>
-<table class="log"><thead><tr><th>Connector</th><th>Group</th><th>Tools</th><th>Used by</th></tr></thead><tbody>{{connectors}}</tbody></table>
+<table class="log"><thead><tr><th>Connector</th><th>Group</th><th>Tools</th><th>Used by</th><th>Switch</th></tr></thead><tbody>{{connectors}}</tbody></table>
 
 <div class="section-head gap"><span>People and roles</span><span>From the identity provider (policy.yaml in the demo)</span></div>
 <table class="log"><thead><tr><th>Person</th><th>Role</th><th>Role id</th><th>Can open</th></tr></thead><tbody>{{people}}</tbody></table>
+
+<div class="section-head gap"><span>Switch changes</span><span>Every time an admin turned an app or connector off or on</span></div>
+{{changes}}
 
 <div class="section-head gap"><span>Recent activity</span><span>Latest 50 audit entries across apps</span></div>
 {{activity}}

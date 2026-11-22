@@ -71,7 +71,7 @@ def record(app, user, tool, kind, inputs, outcome, detail="", retention_days=Non
             "app": app, "seq": (last["seq"] if last else start_seq) + 1,
             "at": stamp(now()),
             "user_id": user["id"], "user_name": user["name"], "role": user["role"], "tool": tool, "kind": kind,
-            "inputs": json.dumps(inputs, sort_keys=True), "outcome": outcome, "detail": detail or "",
+            "inputs": json.dumps(inputs, sort_keys=True, ensure_ascii=False), "outcome": outcome, "detail": detail or "",
         }
         prev = last["hash"] if last else start_hash
         row["prev_hash"], row["hash"] = prev, digest(prev, row)
@@ -82,8 +82,11 @@ def record(app, user, tool, kind, inputs, outcome, detail="", retention_days=Non
 
 def _prune(conn, app, days):
     cutoff = stamp(now() - timedelta(days=days))
-    old = conn.execute("SELECT seq, hash FROM audit WHERE app = ? AND at < ? ORDER BY seq DESC LIMIT 1",
-                       (app, cutoff)).fetchone()
+    # Only the oldest run of expired entries goes, so an entry is never deleted early and the chain has no gaps.
+    keep = conn.execute("SELECT MIN(seq) FROM audit WHERE app = ? AND at >= ?", (app, cutoff)).fetchone()[0]
+    through = (keep - 1) if keep is not None else \
+        conn.execute("SELECT MAX(seq) FROM audit WHERE app = ?", (app,)).fetchone()[0]
+    old = through and conn.execute("SELECT seq, hash FROM audit WHERE app = ? AND seq = ?", (app, through)).fetchone()
     if old:
         conn.execute("DELETE FROM audit WHERE app = ? AND seq <= ?", (app, old["seq"]))
         conn.execute("INSERT OR REPLACE INTO pruned VALUES (?, ?, ?)", (app, old["seq"], old["hash"]))
@@ -121,6 +124,7 @@ def facets(app):
 def verify(app):
     """Recompute the app's chain. Returns (True, None) or (False, first seq that doesn't match)."""
     with db() as conn:
+        conn.execute("BEGIN")  # one snapshot, so a concurrent prune can't move the start between the two reads
         seq, prev = chain_start(conn, app)
         for r in conn.execute("SELECT * FROM audit WHERE app = ? ORDER BY seq", (app,)):
             if r["seq"] != seq + 1 or r["prev_hash"] != prev or digest(prev, r) != r["hash"]:

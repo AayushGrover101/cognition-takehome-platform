@@ -54,3 +54,11 @@ def test_app_modal_shows_that_apps_latest_calls(gateway):
     modal = text[text.index('<dialog id="app-kyc-demo"'):]
     modal = modal[:modal.index("</dialog>")]
     assert "PEP match" in modal and 'href="/audit/kyc-demo">Search all 1 entries' in modal
+
+
+def test_malformed_audit_viewers_dont_break_the_admin_page(gateway, monkeypatch):
+    from gateway import config
+    apps = config.load_apps()
+    apps["kyc-demo"]["audit_viewers"] = [None, 3]
+    monkeypatch.setattr(config, "load_apps", lambda: apps)
+    assert gateway("sam").get("/admin").status_code == 200

@@ -126,3 +126,12 @@ dialog.modal::backdrop { background: rgba(17,17,17,.32); }
 .section-head a { color: var(--text); }
 table.log th.num { text-align: right; }
 table.log tr.clickable td.num { text-align: right; color: var(--text); }
+.btn.danger { border-color: #e5b4b0; color: #b42318; }
+.btn.danger:hover { background: #fdf3f2; }
+form.switch { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+form.switch input { flex: 1 1 200px; height: 34px; font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 0 10px; background: var(--bg); color: var(--text); }
+form.switch .btn { height: 34px; font-size: 13px; }
+form.switch .note { flex: 1 1 100%; }
+table.log td.control { min-width: 280px; }
+.app.off { opacity: .55; }
+.app.off:hover { background: transparent; }
