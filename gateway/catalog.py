@@ -11,6 +11,7 @@ def catalog():
     return {
         "roles": dict(config.ROLES),
         "admin_roles": config.admin_roles(),
+        "audit_retention_days": dict(zip(("minimum", "default"), config.retention_policy())),
         "connectors": {name: {"group": config.connector_group(name)} for name in connectors.connectors()},
         "tools": {t.name: {"connector": t.connector, "kind": t.kind, "description": t.description,
                            "inputs": t.inputs, "returns": t.returns} for t in connectors.TOOLS.values()},
