@@ -42,9 +42,9 @@ def test_only_static_files_inside_the_app_folder(gateway):
 
 
 def test_app_pages_carry_the_browser_lockdown(gateway):
-    r = gateway("priya").get("/apps/kyc-demo/", headers={"host": "tools.test"})
+    r = gateway("priya").get("/apps/kyc-demo/")
     csp = r.headers["content-security-policy"]
-    assert "connect-src http://tools.test/api/kyc-demo/;" in csp
+    assert "connect-src 'self';" in csp and r.headers["referrer-policy"] == "same-origin"
     assert "default-src 'none'" in csp and "form-action 'none'" in csp
     assert r.headers["cache-control"] == "no-store"
 

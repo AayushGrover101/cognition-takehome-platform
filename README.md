@@ -19,7 +19,7 @@ python3 -m pytest tests
 | Sign-in | `/signin`, `/signout`, `policy.yaml` | Mocked single sign-on: choose an account from a dropdown; the role comes from `policy.yaml`. Sets an HTTP-only cookie. |
 | Portal | `/` | Lists only the apps whose `access` includes your role. |
 | App hosting | `/apps/<app>/...` | Reads `APPS_DIR/apps/<app>/` on every request. Checks sign-in, a valid `app.yaml`, and that your role is in `access`, for every file. Serves static file types only, never outside the app folder. |
-| Browser lockdown | `Content-Security-Policy` on app pages | The page loads files only from the gateway and may send requests only to `/api/<app>/`. |
+| Browser lockdown | `Content-Security-Policy` on app pages | The page loads files and sends requests only to the gateway. A browser call to `/api/<app>/` is refused unless it comes from that app's own pages, so one app can't use your grants in another. |
 | Shared files | `/shared/...` | Common JS/CSS from `APPS_DIR/shared/`, locked down if opened directly. |
 | `_me` | `/api/<app>/_me` | The signed-in person's name and role, for apps that can open this app. |
 

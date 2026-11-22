@@ -1,8 +1,7 @@
 """The gateway: sign-in, the portal, and serving app files to people allowed to open them."""
 import html
-import os
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from starlette.applications import Starlette
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -98,19 +97,12 @@ async def signout(request):
     return response
 
 
-def public_origin(request):
-    if os.environ.get("PUBLIC_ORIGIN"):
-        return os.environ["PUBLIC_ORIGIN"].rstrip("/")
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
-    host = request.headers.get("x-forwarded-host", request.headers.get("host", "")).split(",")[0].strip()
-    return f"{proto}://{host}"
-
-
-def app_csp(request, app_name):
-    """Browser lockdown: load files only from here, and send requests only to this app's own /api path."""
+def app_csp():
+    """Browser lockdown: load files and send requests only to this gateway. Which app's API a page may
+    call is checked on the server (from_own_page), so it holds behind any proxy."""
     return (
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
-        f"connect-src {public_origin(request)}/api/{app_name}/; "
+        "connect-src 'self'; "
         "form-action 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; "
         "sandbox allow-scripts allow-same-origin allow-downloads allow-modals; "
         "report-uri /csp-report"
@@ -142,7 +134,7 @@ async def serve_app(request):
     target = static_file(config.APPS_DIR / "apps" / name, rel)
     if not target:
         return notice("Not found", [rel], 404)
-    return FileResponse(target, headers={"Content-Security-Policy": app_csp(request, name),
+    return FileResponse(target, headers={"Content-Security-Policy": app_csp(), "Referrer-Policy": "same-origin",
                                          "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
@@ -164,10 +156,23 @@ async def web_static(request):
 
 # ---------- what an app can ask about the signed-in person ----------
 
+def from_own_page(request, app_name):
+    """A browser call to /api/<app>/ must come from that app's own pages, so one app's code can't use
+    the signed-in person's grants in another app. Non-browser clients send no Sec-Fetch-Site; they
+    can only do what the person could do anyway."""
+    site = request.headers.get("sec-fetch-site")
+    if site is None:
+        return True
+    referer = urlsplit(request.headers.get("referer", "")).path
+    return site == "same-origin" and referer.startswith(f"/apps/{app_name}/")
+
+
 async def me(request):
     user = current_user(request)
     if not user:
         return JSONResponse({"ok": False, "error": "Not signed in"}, status_code=401)
+    if not from_own_page(request, request.path_params["app"]):
+        return refuse(403, "Calls must come from this app's own pages")
     app = config.load_apps().get(request.path_params["app"])
     if not app or not can_open(user, app):
         return JSONResponse({"ok": False, "error": "You don't have access to this app"}, status_code=403)
@@ -187,6 +192,8 @@ async def call_tool(request):
     user = current_user(request)
     if not user:
         return refuse(401, "Not signed in")
+    if not from_own_page(request, request.path_params["app"]):
+        return refuse(403, "Calls must come from this app's own pages")
     app = config.load_apps().get(request.path_params["app"])
     if not app or not can_open(user, app):
         return refuse(403, "You don't have access to this app")

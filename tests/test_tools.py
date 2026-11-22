@@ -80,3 +80,16 @@ def test_me_lists_the_roles_tools_for_this_app(gateway):
     assert gateway("priya").get("/api/kyc-demo/_me").json()["data"]["tools"] == [
         "kyc.escalate_case", "kyc.get_case", "kyc.list_cases"]
     assert gateway("marcus").get("/api/notifier/_me").json()["data"]["tools"] == []
+
+
+def test_browser_calls_only_work_from_the_apps_own_pages(gateway):
+    dana = gateway("dana")
+    def browser(referer):
+        headers = {"sec-fetch-site": "same-origin", **({"referer": referer} if referer else {})}
+        return dana.post("/api/kyc-demo/kyc.list_cases", json={"status": "any"}, headers=headers)
+    assert browser("https://tools.example/apps/kyc-demo/").status_code == 200
+    for referer in ["https://tools.example/apps/notifier/", "https://tools.example/", None]:
+        r = browser(referer)
+        assert r.status_code == 403 and r.json()["error"] == "Calls must come from this app's own pages"
+    r = dana.get("/api/kyc-demo/_me", headers={"sec-fetch-site": "cross-site", "referer": "https://evil.test/apps/kyc-demo/"})
+    assert r.status_code == 403
