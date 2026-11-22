@@ -129,7 +129,7 @@ def load_apps():
     apps = {}
     for path in sorted((APPS_DIR / "apps").glob("*/app.yaml")):
         if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", path.parent.name):
-            continue  # app names are lowercase letters, digits and dashes; others (e.g. "_platform") are reserved
+            continue  # app names are lowercase letters, digits and dashes
         try:
             manifest = yaml.safe_load(path.read_text())
         except (OSError, UnicodeDecodeError, yaml.YAMLError):

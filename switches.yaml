@@ -1,0 +1,12 @@
+# Turn apps, connectors or single tools off, with a reason. Merged changes are live at once; delete the line
+# to turn it back on (that only restores what each app.yaml already grants). Reviewed via .github/CODEOWNERS.
+#
+# apps:
+#   refunds: "Duplicate refunds bug, INC-142"
+# connectors:
+#   slack: "Slack migration, until Dec 1"
+# tools:
+#   flags.set_rollout: "Rollout freeze over the holidays"
+apps: {}
+connectors: {}
+tools: {}
