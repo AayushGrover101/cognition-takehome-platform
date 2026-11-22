@@ -1,0 +1,8 @@
+title: Bad grants
+access: [analyst]
+connectors: [kyc]
+roles:
+  analyst:
+    tools: [kyc.delete_everything, refunds.*, refunds.issue_refund]
+  admin:
+    tools: [kyc.*]

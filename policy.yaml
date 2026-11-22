@@ -8,3 +8,12 @@ users:
   - {id: marcus, name: Marcus Lee,  role: support}
   - {id: lena,   name: Lena Novak,  role: support_lead}
   - {id: sam,    name: Sam Kim,     role: admin}
+
+# Connector groups. Internal: company systems. External: outside services. Blocked: no app may use it.
+# An app can't combine Internal and External connectors. A connector missing here counts as Blocked.
+connectors:
+  kyc: internal
+  refunds: internal
+  flags: internal
+  slack: external
+  gdrive: blocked

@@ -8,7 +8,7 @@ from starlette.applications import Starlette
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from . import config
+from . import config, connectors
 
 WEB = Path(__file__).parent / "web"
 STATIC_TYPES = {".html", ".js", ".css", ".svg", ".png", ".jpg", ".ico", ".woff2"}
@@ -174,7 +174,43 @@ async def me(request):
     return JSONResponse({"ok": True, "data": {
         "user": {"name": user["name"], "role": user["role"]},
         "app": {"name": app["name"], "title": app["title"]},
+        "tools": config.tools_for(app, user["role"]),
     }})
+
+
+def refuse(status, error):
+    return JSONResponse({"ok": False, "error": error}, status_code=status)
+
+
+async def call_tool(request):
+    """POST /api/<app>/<connector>.<tool> with the inputs as a JSON object."""
+    user = current_user(request)
+    if not user:
+        return refuse(401, "Not signed in")
+    app = config.load_apps().get(request.path_params["app"])
+    if not app or not can_open(user, app):
+        return refuse(403, "You don't have access to this app")
+    name = request.path_params["tool"]
+    tool = connectors.TOOLS.get(name)
+    if not tool or tool.connector not in app["connectors"]:
+        return refuse(404, f"This app has no tool called {name}")
+    if name not in config.tools_for(app, user["role"]):
+        return refuse(403, f"Your role ({label(user['role'])}) can't use {name} in this app")
+    if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
+        return refuse(415, "Send inputs as JSON")
+    try:
+        body = await request.json()
+    except ValueError:
+        return refuse(400, "Inputs must be valid JSON")
+    args, problem = connectors.check_inputs(tool.inputs, body)
+    if problem:
+        return refuse(400, problem)
+    ctx = {"user": {"id": user["id"], "name": user["name"], "role": user["role"]}, "app": app["name"]}
+    try:
+        result = tool.handler(args, ctx)
+    except connectors.ToolError as e:
+        return refuse(409, str(e))
+    return JSONResponse({"ok": True, "data": connectors.keep_declared(result, tool.returns)})
 
 
 async def csp_report(request):
@@ -192,6 +228,7 @@ def create_app():
         Route("/shared/{path:path}", serve_shared),
         Route("/web/{path:path}", web_static),
         Route("/api/{app}/_me", me),
+        Route("/api/{app}/{tool}", call_tool, methods=["POST"]),
         Route("/csp-report", csp_report, methods=["POST"]),
     ])
 

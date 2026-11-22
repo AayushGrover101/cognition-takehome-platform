@@ -1,0 +1,7 @@
+title: Support notifier
+description: Post updates to support channels.
+access: [support, support_lead]
+connectors: [slack]
+roles:
+  support_lead:
+    tools: [slack.post_message]
