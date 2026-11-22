@@ -5,3 +5,4 @@ connectors: [slack]
 roles:
   support_lead:
     tools: [slack.post_message]
+audit: [slack.post_message]

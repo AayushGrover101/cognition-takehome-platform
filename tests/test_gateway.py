@@ -60,7 +60,8 @@ def test_me_returns_user_and_app_only_to_people_with_access(gateway):
     assert data == {"user": {"name": "Dana Ortiz", "role": "compliance_officer", "title": "Compliance Officer"},
                     "app": {"name": "kyc-demo", "title": "KYC demo"},
                     "tools": ["kyc.decide_case", "kyc.escalate_case", "kyc.get_case", "kyc.get_case_full",
-                              "kyc.list_cases"]}
+                              "kyc.list_cases"],
+                    "audit_trail": "/audit/kyc-demo"}
     assert gateway("marcus").get("/api/kyc-demo/_me").status_code == 403
 
 

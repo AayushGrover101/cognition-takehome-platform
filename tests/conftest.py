@@ -6,12 +6,13 @@ os.environ["APPS_DIR"] = str(Path(__file__).parent / "fixtures" / "apps_repo")
 import pytest
 from starlette.testclient import TestClient
 
-from gateway import connectors
+from gateway import audit, connectors
 from gateway.main import create_app
 
 
 @pytest.fixture(autouse=True)
-def fresh_data():
+def fresh_data(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUDIT_DB", str(tmp_path / "audit.db"))
     connectors.reset()
 
 

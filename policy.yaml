@@ -9,6 +9,9 @@ roles:
   engineer: Software Engineer               # Engineering: turns flags on/off, changes rollouts
   platform_engineer: Platform Engineer      # Owns the gateway and connectors, reviews app.yaml
 
+# Roles that run the platform: the admin page and every app's audit trail.
+admin_roles: [platform_engineer]
+
 users:
   - {id: priya,  name: Priya Shah,  role: kyc_analyst}
   - {id: dana,   name: Dana Ortiz,  role: compliance_officer}

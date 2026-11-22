@@ -7,7 +7,7 @@ from starlette.applications import Starlette
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from . import config, connectors
+from . import audit, config, connectors
 
 WEB = Path(__file__).parent / "web"
 STATIC_TYPES = {".html", ".js", ".css", ".svg", ".png", ".jpg", ".ico", ".woff2"}
@@ -25,10 +25,7 @@ def label(role):
 
 
 def page(name, status=200, **values):
-    text = (WEB / name).read_text()
-    for key, value in values.items():
-        text = text.replace("{{" + key + "}}", value)
-    return HTMLResponse(text, status_code=status)
+    return HTMLResponse(page_fragment(name, **values), status_code=status)
 
 
 def initials(text):
@@ -186,6 +183,7 @@ async def me(request):
         "user": {"name": user["name"], "role": user["role"], "title": label(user["role"])},
         "app": {"name": app["name"], "title": app["title"]},
         "tools": config.tools_for(app, user["role"]),
+        "audit_trail": f"/audit/{app['name']}" if config.can_view_audit(user, app) else None,
     }})
 
 
@@ -207,8 +205,15 @@ async def call_tool(request):
     tool = connectors.TOOLS.get(name)
     if not tool or tool.connector not in app["connectors"]:
         return refuse(404, f"This app has no tool called {name}")
+    def log(outcome, detail="", inputs=None):
+        if config.audited(app, tool):
+            audit.record(app["name"], user, name, tool.kind, inputs or {}, outcome, detail,
+                         retention_days=app["audit_retention_days"])
+
     if name not in config.tools_for(app, user["role"]):
-        return refuse(403, f"Your role ({label(user['role'])}) can't use {name} in this app")
+        error = f"Your role ({label(user['role'])}) can't use {name} in this app"
+        log("refused", error)
+        return refuse(403, error)
     if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
         return refuse(415, "Send inputs as JSON")
     try:
@@ -222,8 +227,85 @@ async def call_tool(request):
     try:
         result = tool.handler(args, ctx)
     except connectors.ToolError as e:
+        log("refused", str(e), args)
         return refuse(409, str(e))
+    log("ok", inputs=args)
     return JSONResponse({"ok": True, "data": connectors.keep_declared(result, tool.returns)})
+
+
+# ---------- each app's audit trail ----------
+
+def audit_rows(rows, show_app=False):
+    def cell(row):
+        inputs = ", ".join(f"{k}: {v}" for k, v in row["inputs"].items())
+        outcome = f'<span class="tag {"allowed" if row["outcome"] == "ok" else "refused"}">' \
+                  f'{"OK" if row["outcome"] == "ok" else "Refused"}</span>'
+        detail = f'<div class="note">{html.escape(row["detail"])}</div>' if row["detail"] else ""
+        app_cell = f'<td><a href="/audit/{html.escape(row["app"])}">{html.escape(row["app"])}</a></td>' if show_app else ""
+        return (f'<tr><td class="num">{html.escape(row["at"].replace("T", " ").rstrip("Z"))}</td>{app_cell}'
+                f'<td>{html.escape(row["user_name"])}<div class="note">{html.escape(label(row["role"]))}</div></td>'
+                f'<td><code>{html.escape(row["tool"])}</code> <span class="tag">{html.escape(row["kind"])}</span></td>'
+                f'<td class="wrap-text">{html.escape(inputs) or "—"}</td><td>{outcome}{detail}</td></tr>')
+    if not rows:
+        return '<div class="empty"><strong>Nothing recorded yet</strong>Write calls and opted-in reads appear here.</div>'
+    head = "<th>Time (UTC)</th>" + ("<th>App</th>" if show_app else "") + "<th>Who</th><th>Tool</th><th>Inputs</th><th>Result</th>"
+    return f'<table class="log"><thead><tr>{head}</tr></thead><tbody>{"".join(cell(r) for r in rows)}</tbody></table>'
+
+
+def topbar(user, crumbs):
+    return page_fragment("topbar.html", crumbs=crumbs, initials=html.escape(initials(user["name"])),
+                         user=html.escape(user["name"]), role=html.escape(label(user["role"])))
+
+
+def page_fragment(name, **values):
+    text = (WEB / name).read_text()
+    for key, value in values.items():
+        text = text.replace("{{" + key + "}}", value)
+    return text
+
+
+async def audit_page(request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse(f"/signin?next={quote(request.url.path, safe='')}", status_code=303)
+    app = config.load_apps().get(request.path_params["app"])
+    if not app:
+        return notice("App not found", [f"There is no app called {request.path_params['app']}."], 404)
+    if not config.can_view_audit(user, app):
+        return notice("You can't view this audit trail",
+                      [f"Signed in as {user['name']} ({label(user['role'])}).",
+                       "Roles listed in the app's audit_viewers, and platform admins, can view it."], 403)
+    if app["audit_retention_days"]:
+        audit.prune(app["name"], app["audit_retention_days"])
+    ok, broken = audit.verify(app["name"])
+    chain = ('<span class="tag allowed">Chain intact</span>' if ok else
+             f'<span class="tag refused">Chain broken at entry {broken}</span>')
+    listed = ", ".join(app["audit"]) or "nothing"
+    kept = (f'Kept for {app["audit_retention_days"]} days.' if app["audit_retention_days"]
+            else "Kept until the app sets audit_retention_days.")
+    crumbs = (f'<span class="crumb">/</span><span class="here">{html.escape(app["title"])}</span>'
+              f'<span class="crumb">/</span><span class="here">Audit trail</span>')
+    q = request.query_params
+    chosen = {k: q.get(k, "").strip() for k in ("user", "tool", "kind", "outcome", "q")}
+    people, tools = audit.facets(app["name"])
+    rows = audit.entries(app["name"], limit=500, **{k: v or None for k, v in chosen.items()})
+
+    def menu(name, blank, options):
+        opts = "".join(f'<option value="{html.escape(v)}"{" selected" if chosen[name] == v else ""}>{html.escape(t)}</option>'
+                       for v, t in [("", blank)] + list(options))
+        return f'<select name="{name}" aria-label="{html.escape(blank)}">{opts}</select>'
+    filters = (f'<form class="filters" method="get" action="/audit/{html.escape(app["name"])}">'
+               f'<input type="search" name="q" value="{html.escape(chosen["q"])}" placeholder="Search people, tools, inputs, reasons">'
+               + menu("user", "Anyone", people.items()) + menu("tool", "Any tool", [(t, t) for t in tools])
+               + menu("kind", "Reads and writes", [("read", "Reads"), ("write", "Writes")])
+               + menu("outcome", "Any result", [("ok", "OK"), ("refused", "Refused")])
+               + '<button class="btn" type="submit">Filter</button>'
+               + (f'<a class="btn ghost" href="/audit/{html.escape(app["name"])}">Clear</a>' if any(chosen.values()) else "")
+               + '</form>')
+    shown = f'{len(rows)} matching' if any(chosen.values()) else f'{len(rows)} entries'
+    return page("audit.html", topbar=topbar(user, crumbs), title=html.escape(app["title"]), chain=chain,
+                listed=html.escape(listed), kept=kept, filters=filters,
+                shown=shown, rows=audit_rows(rows))
 
 
 async def csp_report(request):
@@ -243,6 +325,7 @@ def create_app():
         Route("/api/{app}/_me", me),
         Route("/api/{app}/{tool}", call_tool, methods=["POST"]),
         Route("/csp-report", csp_report, methods=["POST"]),
+        Route("/audit/{app}", audit_page),
     ])
 
 
