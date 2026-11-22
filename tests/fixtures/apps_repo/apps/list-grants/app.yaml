@@ -1,0 +1,6 @@
+title: List grants
+description: Grants written as a list.
+access: [kyc_analyst]
+connectors: [kyc]
+roles:
+  kyc_analyst: [kyc.list_cases]

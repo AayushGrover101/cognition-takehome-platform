@@ -67,3 +67,10 @@ def test_audit_page_is_for_audit_viewers_and_admins_only(gateway):
 def test_audit_settings_are_checked(gateway):
     text = gateway("priya").get("/apps/bad-grants/").text
     assert "audit_reads: unknown tool kyc.nope" in text and "Unknown role in audit_viewers: wizard" in text
+
+
+def test_entries_across_apps_are_newest_first(gateway):
+    call(gateway("dana"), "kyc.escalate_case", {"case_id": "KYC-1001", "reason": "PEP match"})
+    call(gateway("lena"), "slack.post_message", {"channel": "#support", "text": "a"}, app="notifier")
+    call(gateway("dana"), "kyc.escalate_case", {"case_id": "KYC-1002", "reason": "PEP match"})
+    assert [(r["app"], r["seq"]) for r in audit.entries()] == [("kyc-demo", 2), ("notifier", 1), ("kyc-demo", 1)]

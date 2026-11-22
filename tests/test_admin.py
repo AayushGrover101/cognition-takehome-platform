@@ -11,6 +11,7 @@ def test_admin_page_shows_apps_connectors_people_and_activity(gateway):
     assert "Published" in text and "Not published" in text and "is Blocked" in text
     assert "<strong>Compliance Officer</strong>: <code>kyc.decide_case</code>" in text
     assert "<strong>gdrive</strong>" in text and "Blocked" in text
+    assert "List grants" in text and "kyc_analyst must be a list of tool names" in text
     assert "Priya Shah" in text and "kyc.escalate_case" in text and "1 entries" in text
 
 
