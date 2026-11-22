@@ -21,6 +21,10 @@ users:
   - {id: alex,   name: Alex Chen,   role: engineer}
   - {id: sam,    name: Sam Kim,     role: platform_engineer}
 
+# How long audit entries are kept. An app may set a longer audit_retention_days in its app.yaml,
+# never a shorter one. 5 years is a common floor for financial records.
+audit_retention_days: {minimum: 1825, default: 2555}
+
 # Connector groups. Internal: company systems. External: outside services. Blocked: no app may use it.
 # An app can't combine Internal and External connectors. A connector missing here counts as Blocked.
 connectors:

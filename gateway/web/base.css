@@ -102,9 +102,27 @@ table.log code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monosp
 table.log .note { color: var(--muted); font-size: 12px; }
 .section-head.gap { margin-top: 48px; }
 table.log td > div + div { margin-top: 4px; }
-details.audited summary { cursor: pointer; list-style: none; white-space: nowrap; }
-details.audited summary::-webkit-details-marker { display: none; }
-details.audited summary::after { content: " ▾"; color: var(--faint); }
-details.audited[open] summary { margin-bottom: 6px; }
-details.audited[open] summary::after { content: " ▴"; }
-details.audited div { white-space: nowrap; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.filters input, .filters select { height: 34px; font: inherit; font-size: 13px; color: var(--text); border: 1px solid var(--line-strong); border-radius: 8px; background: var(--bg); padding: 0 10px; }
+.filters input { flex: 1 1 260px; }
+.filters select { appearance: none; -webkit-appearance: none; padding-right: 28px; cursor: pointer; background: var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%236b6b6b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 9px center; }
+.filters .btn { height: 34px; font-size: 13px; }
+.count { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td, tr.clickable:focus-visible td { background: var(--hover); }
+tr.clickable:focus-visible { outline: none; }
+dialog.modal { width: min(760px, calc(100vw - 48px)); max-height: calc(100vh - 80px); margin: auto; padding: 28px 32px 32px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--text); box-shadow: 0 24px 64px rgba(0,0,0,.18); }
+dialog.modal::backdrop { background: rgba(17,17,17,.32); }
+.modal-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+.modal-head > div { flex: 1; }
+.modal-head .eyebrow { margin-bottom: 4px; }
+.modal-head h2 { font-size: 22px; font-weight: 600; letter-spacing: -.02em; }
+.modal-head .tag { margin-top: 6px; }
+.item { display: grid; grid-template-columns: 170px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+.item-label { color: var(--muted); font-size: 12.5px; }
+.item code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.item .note { color: var(--muted); font-size: 12px; }
+.item > div + div > div + div { margin-top: 4px; }
+.section-head a { color: var(--text); }
+table.log th.num { text-align: right; }
+table.log tr.clickable td.num { text-align: right; color: var(--text); }
