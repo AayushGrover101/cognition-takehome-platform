@@ -99,3 +99,5 @@ table.log td.num { font-variant-numeric: tabular-nums; white-space: nowrap; colo
 table.log td.wrap-text { word-break: break-word; max-width: 320px; }
 table.log code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 table.log .note { color: var(--muted); font-size: 12px; }
+.section-head.gap { margin-top: 48px; }
+table.log td > div + div { margin-top: 4px; }

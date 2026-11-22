@@ -86,7 +86,8 @@ async def portal(request):
         '<div class="empty"><strong>No apps yet</strong>Nothing is available for your role. '
         'Ask your team lead if you expected to see an app here.</div>')
     count = f'{len(apps)} app{"" if len(apps) == 1 else "s"}'
-    return page("portal.html", cards=cards, count=count, first=html.escape(user["name"].split()[0]), initials=html.escape(initials(user["name"])),
+    admin = '<a class="btn ghost" href="/admin">Admin</a><span class="divider"></span>' if user["role"] in config.admin_roles() else ""
+    return page("portal.html", admin=admin, cards=cards, count=count, first=html.escape(user["name"].split()[0]), initials=html.escape(initials(user["name"])),
                 user=html.escape(user["name"]), role=html.escape(label(user["role"])))
 
 
@@ -289,6 +290,57 @@ async def csp_report(request):
     return Response(status_code=204)
 
 
+# ---------- admin page (platform engineers) ----------
+
+def tag(text, cls=""):
+    return f'<span class="tag {cls}">{html.escape(text)}</span>'
+
+
+async def admin_page(request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/signin?next=%2Fadmin", status_code=303)
+    if user["role"] not in config.admin_roles():
+        return notice("You can't open the admin page",
+                      [f"Signed in as {user['name']} ({label(user['role'])}).", "Only platform admins can."], 403)
+    apps, counts = config.load_apps(), audit.counts()
+
+    people = "".join(f'<tr><td>{html.escape(u["name"])}</td><td>{html.escape(label(u["role"]))}</td>'
+                     f'<td><code>{html.escape(u["role"])}</code></td>'
+                     f'<td>{", ".join(html.escape(a["title"]) for a in apps.values() if can_open(u, a)) or "—"}</td></tr>'
+                     for u in config.users().values())
+
+    def connector_row(name):
+        group = config.connector_group(name)
+        tools = "".join(f'<div><code>{html.escape(t.name)}</code> {tag(t.kind)} <span class="note">{html.escape(t.description)}</span></div>'
+                        for t in connectors.TOOLS.values() if t.connector == name)
+        used = ", ".join(html.escape(a["title"]) for a in apps.values() if name in a["connectors"]) or "—"
+        return f'<tr><td><strong>{html.escape(name)}</strong></td><td>{tag(group.title(), group)}</td><td>{tools}</td><td>{used}</td></tr>'
+    conns = "".join(connector_row(c) for c in connectors.connectors())
+
+    def app_row(a):
+        if a["problems"]:
+            status = tag("Not published", "refused") + "".join(f'<div class="note">{html.escape(p)}</div>' for p in a["problems"])
+        else:
+            status = tag("Published", "published")
+        grants = "".join(
+            f'<div><strong>{html.escape(label(r))}</strong>: '
+            f'{", ".join(f"<code>{html.escape(t)}</code>" for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
+            for r in a["access"] if r in config.ROLES) or "—"
+        writes = [t for r in a["access"] for t in config.tools_for(a, r) if connectors.TOOLS[t].kind == "write"]
+        reads = ", ".join(html.escape(x) for x in a["audit_reads"]) or "none"
+        trail = f'<a href="/audit/{html.escape(a["name"])}">{counts.get(a["name"], 0)} entries</a>'
+        conns = " ".join(tag(c, config.connector_group(c)) for c in a["connectors"]) or "—"
+        return (f'<tr><td><strong>{html.escape(a["title"])}</strong><div class="note">{html.escape(a["name"])}</div></td>'
+                f'<td>{status}</td><td>{conns}</td><td>{grants}</td>'
+                f'<td>{"writes: " + str(len(set(writes))) + "<br>" if writes else ""}reads: {reads}<br>{trail}</td></tr>')
+    app_rows = "".join(app_row(a) for a in apps.values())
+
+    crumbs = '<span class="crumb">/</span><span class="here">Admin</span>'
+    return page("admin.html", topbar=topbar(user, crumbs), people=people, connectors=conns, apps=app_rows,
+                activity=audit_rows(audit.entries(limit=50), show_app=True))
+
+
 def create_app():
     return Starlette(routes=[
         Route("/", portal),
@@ -302,6 +354,7 @@ def create_app():
         Route("/api/{app}/{tool}", call_tool, methods=["POST"]),
         Route("/csp-report", csp_report, methods=["POST"]),
         Route("/audit/{app}", audit_page),
+        Route("/admin", admin_page),
     ])
 
 
