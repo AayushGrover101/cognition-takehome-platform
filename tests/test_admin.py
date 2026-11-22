@@ -24,9 +24,9 @@ def test_admins_are_marked_in_sign_in_and_top_bar(gateway):
 
 def test_admin_lists_exactly_which_tools_are_audited(gateway):
     text = gateway("sam").get("/admin").text
-    assert '<dialog id="app-kyc-demo" class="modal">' in text and "2555 days" in text
-    assert "<code>kyc.get_case_full</code> <span class=\"note\">read, listed in audit_reads</span>" in text
-    assert "<code>kyc.decide_case</code> <span class=\"note\">write, always</span>" in text
+    assert '<dialog id="app-kyc-demo" class="modal">' in text and "Not set, entries are kept" in text
+    assert "<code>kyc.get_case_full</code> <span class=\"note\">read</span>" in text
+    assert "<code>kyc.decide_case</code> <span class=\"note\">write</span>" in text
     assert "<code>kyc.get_case</code> <span class=\"note\">" not in text
 
 
@@ -37,7 +37,7 @@ def test_admin_lists_audited_tools_no_role_is_granted(gateway, tmp_path, monkeyp
     kyc["roles"] = {r: {"tools": ["kyc.list_cases"]} for r in kyc["roles"]}
     monkeypatch.setattr(config, "load_apps", lambda: apps)
     text = gateway("sam").get("/admin").text
-    assert "<code>kyc.get_case_full</code> <span class=\"note\">read, listed in audit_reads; no role granted, refusals only" in text
+    assert "<code>kyc.get_case_full</code> <span class=\"note\">read; no role granted, refusals only" in text
 
 
 def test_app_modal_shows_that_apps_latest_calls(gateway):
