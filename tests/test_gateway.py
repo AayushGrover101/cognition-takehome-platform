@@ -126,9 +126,32 @@ def test_tampering_is_detected(gateway):
 
 
 def test_expired_rows_are_removed_by_retention(gateway):
-    audit.record(None, "x", "kyc.list_cases", {}, "allowed", retention_days=-1)
+    for days in (30, -1, 30, -1):
+        audit.record(None, "x", "kyc.list_cases", {}, "allowed", retention_days=days)
+    assert audit.purge_expired() == 2
+    assert audit.verify() == {"ok": True, "rows": 2, "broken_at": None}
     audit.record(None, "x", "kyc.list_cases", {}, "allowed", retention_days=30)
-    assert audit.purge_expired() == 1 and audit.verify()["ok"]
+    assert audit.verify() == {"ok": True, "rows": 3, "broken_at": None}
+    # A row removed any other way is still detected.
+    db = config.db()
+    db.execute("DROP TRIGGER audit_no_early_delete")
+    db.execute("DELETE FROM audit WHERE id = 3")
+    assert audit.verify()["ok"] is False
+
+
+def test_malformed_requests_and_manifests(gateway, tmp_path, monkeypatch):
+    r = gateway("priya").post("/api/kyc-demo/kyc.list_cases", content="[1, 2]")
+    assert r.status_code == 400 and "JSON object" in r.json()["error"]
+    assert gateway("priya").post("/api/kyc-demo/kyc.list_cases", content="not json").status_code == 400
+    assert gateway().get("/signin", params={"next": "/\\evil.example/"}).text.count('value="/"') == 1
+    assert gateway("priya").post("/csp-report", json={"csp-report": {"document-uri": "http://x/apps/kyc-demo/"}}).status_code == 204
+    for i, text in enumerate(["- just\n- a list\n", "operations: kyc.list_cases\n", "audit: {kyc.list_cases: true}\n"]):
+        (tmp_path / "apps" / f"broken-{i}").mkdir(parents=True)
+        (tmp_path / "apps" / f"broken-{i}" / "app.yaml").write_text(text)
+    monkeypatch.setattr(config, "APPS_DIR", tmp_path)
+    apps = {a["name"]: a for a in gateway("sam").get("/admin/api/state").json()["apps"]}
+    assert len(apps) == 3 and all(a["status"] == "blocked" for a in apps.values())
+    assert call(gateway("priya"), "broken-1", "kyc.list_cases").status_code == 403
 
 
 def test_apps_are_served_with_the_browser_rule(gateway):

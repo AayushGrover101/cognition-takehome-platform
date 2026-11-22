@@ -26,6 +26,13 @@ def init():
         "WHEN OLD.expires_at > CAST(strftime('%s','now') AS REAL) "
         "BEGIN SELECT RAISE(ABORT, 'audit rows can only be removed after their retention period'); END"
     )
+    # When retention removes a row, its fingerprints stay here so the chain can still be verified.
+    c.execute("CREATE TABLE IF NOT EXISTS audit_removed (id INTEGER PRIMARY KEY, prev_hash TEXT, hash TEXT)")
+    for action in ("UPDATE", "DELETE"):
+        c.execute(
+            f"CREATE TRIGGER IF NOT EXISTS audit_removed_no_{action.lower()} BEFORE {action} ON audit_removed "
+            "BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END"
+        )
     for col in ("user_id", "app", "operation", "record_id", "ts"):
         c.execute(f"CREATE INDEX IF NOT EXISTS audit_{col} ON audit({col})")
 
@@ -55,7 +62,10 @@ def record(user, app, operation, inputs, outcome, reason="", record_id=None, ret
     }
     c = config.db()
     with config._lock:
-        last = c.execute("SELECT hash FROM audit ORDER BY id DESC LIMIT 1").fetchone()
+        last = c.execute(
+            "SELECT hash FROM (SELECT id, hash FROM audit UNION ALL SELECT id, hash FROM audit_removed) "
+            "ORDER BY id DESC LIMIT 1"
+        ).fetchone()
         prev = last["hash"] if last else ""
         c.execute(
             f"INSERT INTO audit ({', '.join(FIELDS)}, prev_hash, hash) VALUES ({', '.join('?' * len(FIELDS))}, ?, ?)",
@@ -85,18 +95,31 @@ def search(user=None, app=None, operation=None, record_id=None, outcome=None, si
 
 
 def verify():
-    """Recomputes every fingerprint. Any edited, inserted or removed row in the middle breaks the chain."""
+    """Recomputes every fingerprint. An edited or inserted row, or one removed outside retention, breaks the chain."""
+    c = config.db()
+    entries = [dict(r) for r in c.execute("SELECT * FROM audit")]
+    entries += [dict(r) for r in c.execute("SELECT * FROM audit_removed")]
     prev, count = None, 0
-    for r in config.db().execute("SELECT * FROM audit ORDER BY id"):
-        r = dict(r)
+    for r in sorted(entries, key=lambda e: e["id"]):
         if prev is not None and r["prev_hash"] != prev:
             return {"ok": False, "rows": count, "broken_at": r["id"]}
-        if _hash(r["prev_hash"], r) != r["hash"]:
-            return {"ok": False, "rows": count, "broken_at": r["id"]}
-        prev, count = r["hash"], count + 1
+        if "ts" in r:
+            if _hash(r["prev_hash"], r) != r["hash"]:
+                return {"ok": False, "rows": count, "broken_at": r["id"]}
+            count += 1
+        prev = r["hash"]
     return {"ok": True, "rows": count, "broken_at": None}
 
 
 def purge_expired():
-    cur = config.db().execute("DELETE FROM audit WHERE expires_at <= CAST(strftime('%s','now') AS REAL)")
-    return cur.rowcount
+    c, cutoff = config.db(), int(time.time()) - 1
+    with config._lock:
+        c.execute("BEGIN")
+        try:
+            c.execute("INSERT INTO audit_removed SELECT id, prev_hash, hash FROM audit WHERE expires_at <= ?", (cutoff,))
+            removed = c.execute("DELETE FROM audit WHERE expires_at <= ?", (cutoff,)).rowcount
+            c.execute("COMMIT")
+        except Exception:
+            c.execute("ROLLBACK")
+            raise
+    return removed
