@@ -148,9 +148,11 @@ async def serve_app(request):
 
 async def serve_shared(request):
     target = static_file(config.APPS_DIR / "shared", request.path_params["path"])
-    if not target:
+    if not target or target.suffix.lower() == ".html":
         return JSONResponse({"error": "not found"}, status_code=404)
-    return FileResponse(target, headers={"Cache-Control": "no-store"})
+    # Shared files are only ever loaded by an app page. Opened directly, they may not run or load anything.
+    return FileResponse(target, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+                                         "Content-Security-Policy": "default-src 'none'; sandbox"})
 
 
 # ---------- the call path ----------
