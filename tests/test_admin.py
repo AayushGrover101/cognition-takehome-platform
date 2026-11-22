@@ -21,3 +21,10 @@ def test_catalog_lists_roles_connectors_and_tools():
     assert c["roles"]["kyc_analyst"] == "KYC Analyst" and c["admin_roles"] == ["platform_engineer"]
     assert c["connectors"]["gdrive"] == {"group": "blocked"}
     assert c["tools"]["kyc.decide_case"]["kind"] == "write" and "tax_id" in c["tools"]["kyc.get_case_full"]["returns"]
+
+
+def test_admins_are_marked_in_sign_in_and_top_bar(gateway):
+    signin = gateway().get("/signin").text
+    assert "Sam Kim — Platform Engineer · Admin" in signin and "Priya Shah — KYC Analyst</option>" in signin
+    assert '<span class="tag">Admin</span>' in gateway("sam").get("/").text
+    assert '<span class="tag">Admin</span>' not in gateway("priya").get("/").text

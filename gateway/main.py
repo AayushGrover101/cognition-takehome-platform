@@ -24,6 +24,14 @@ def label(role):
     return config.ROLES.get(role, role)
 
 
+def is_admin(user):
+    return user["role"] in config.admin_roles()
+
+
+def admin_tag(user):
+    return '<span class="tag">Admin</span>' if is_admin(user) else ""
+
+
 def page(name, status=200, **values):
     return HTMLResponse(page_fragment(name, **values), status_code=status)
 
@@ -56,7 +64,7 @@ async def signin(request):
     current = me["id"] if me else ""
     options = "".join(
         f'<option value="{html.escape(u["id"])}"{" selected" if u["id"] == current else ""}>'
-        f'{html.escape(u["name"])} — {html.escape(label(u["role"]))}</option>'
+        f'{html.escape(u["name"])} — {html.escape(label(u["role"]))}{" · Admin" if is_admin(u) else ""}</option>'
         for u in config.users().values()
     )
     target = config.load_apps().get(nxt.split("/")[2]) if nxt.startswith("/apps/") and nxt.count("/") >= 2 else None
@@ -86,8 +94,8 @@ async def portal(request):
         '<div class="empty"><strong>No apps yet</strong>Nothing is available for your role. '
         'Ask your team lead if you expected to see an app here.</div>')
     count = f'{len(apps)} app{"" if len(apps) == 1 else "s"}'
-    admin = '<a class="btn ghost" href="/admin">Admin</a><span class="divider"></span>' if user["role"] in config.admin_roles() else ""
-    return page("portal.html", admin=admin, cards=cards, count=count, first=html.escape(user["name"].split()[0]), initials=html.escape(initials(user["name"])),
+    admin = '<a class="btn ghost" href="/admin">Admin</a><span class="divider"></span>' if is_admin(user) else ""
+    return page("portal.html", admin=admin, tag=admin_tag(user), cards=cards, count=count, first=html.escape(user["name"].split()[0]), initials=html.escape(initials(user["name"])),
                 user=html.escape(user["name"]), role=html.escape(label(user["role"])))
 
 
@@ -181,7 +189,7 @@ async def me(request):
     if not app or not can_open(user, app):
         return JSONResponse({"ok": False, "error": "You don't have access to this app"}, status_code=403)
     return JSONResponse({"ok": True, "data": {
-        "user": {"name": user["name"], "role": user["role"], "title": label(user["role"])},
+        "user": {"name": user["name"], "role": user["role"], "title": label(user["role"]), "admin": is_admin(user)},
         "app": {"name": app["name"], "title": app["title"]},
         "tools": config.tools_for(app, user["role"]),
         "audit_trail": f"/audit/{app['name']}" if config.can_view_audit(user, app) else None,
@@ -253,7 +261,7 @@ def audit_rows(rows, show_app=False):
 
 
 def topbar(user, crumbs):
-    return page_fragment("topbar.html", crumbs=crumbs, initials=html.escape(initials(user["name"])),
+    return page_fragment("topbar.html", crumbs=crumbs, tag=admin_tag(user), initials=html.escape(initials(user["name"])),
                          user=html.escape(user["name"]), role=html.escape(label(user["role"])))
 
 
