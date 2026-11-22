@@ -145,3 +145,11 @@ def test_search_matches_non_ascii_inputs(gateway):
     user = {"id": "dana", "name": "Dana Ortiz", "role": "compliance_officer"}
     audit.record("x", user, "kyc.escalate_case", "write", {"reason": "José Núñez"}, "ok")
     assert len(audit.entries("x", q="José")) == 1 and audit.verify("x") == (True, None)
+
+
+def test_unstorable_text_is_refused_before_the_write_runs(gateway):
+    r = gateway("dana").post("/api/kyc-demo/kyc.escalate_case", content=b'{"case_id": "KYC-1001", "reason": "\\ud800"}',
+                             headers={"content-type": "application/json"})
+    assert r.status_code == 400 and audit.entries("kyc-demo") == []
+    assert gateway("dana").post("/api/kyc-demo/kyc.escalate_case",
+                                json={"case_id": "KYC-1001", "reason": "ok"}).status_code == 200

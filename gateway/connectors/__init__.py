@@ -55,6 +55,15 @@ def connectors():
     return sorted({t.connector for t in TOOLS.values()})
 
 
+def is_text(value):
+    """False for strings JSON allows but UTF-8 can't store (lone surrogates), so they can't break the audit write."""
+    try:
+        value.encode("utf-8")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
 def check_inputs(spec, data):
     """Inputs are written as {'case_id': 'str', 'limit': 'int?', 'decision': ['approve', 'reject']}."""
     if not isinstance(data, dict):
@@ -76,7 +85,7 @@ def check_inputs(spec, data):
         else:
             base = kind.rstrip("?")
             ok = {
-                "str": isinstance(value, str) and value.strip() != "",
+                "str": isinstance(value, str) and value.strip() != "" and is_text(value),
                 "int": isinstance(value, int) and not isinstance(value, bool),
                 "number": isinstance(value, (int, float)) and not isinstance(value, bool),
                 "bool": isinstance(value, bool),
