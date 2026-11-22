@@ -102,3 +102,9 @@ table.log code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monosp
 table.log .note { color: var(--muted); font-size: 12px; }
 .section-head.gap { margin-top: 48px; }
 table.log td > div + div { margin-top: 4px; }
+details.audited summary { cursor: pointer; list-style: none; white-space: nowrap; }
+details.audited summary::-webkit-details-marker { display: none; }
+details.audited summary::after { content: " ▾"; color: var(--faint); }
+details.audited[open] summary { margin-bottom: 6px; }
+details.audited[open] summary::after { content: " ▴"; }
+details.audited div { white-space: nowrap; }

@@ -335,14 +335,17 @@ async def admin_page(request):
             f'<div><strong>{html.escape(label(r))}</strong>: '
             f'{", ".join(f"<code>{html.escape(t)}</code>" for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
             for r in a["access"] if r in config.ROLES) if not a["problems"] else "—"
-        writes = [] if a["problems"] else [
-            t for r in a["access"] for t in config.tools_for(a, r) if connectors.TOOLS[t].kind == "write"]
-        reads = ", ".join(html.escape(x) for x in a["audit_reads"]) or "none"
+        granted = [] if a["problems"] else sorted({t for r in a["access"] for t in config.tools_for(a, r)})
+        audited = [connectors.TOOLS[t] for t in granted if config.audited(a, connectors.TOOLS[t])]
+        listed = "".join(f'<div><code>{html.escape(t.name)}</code> <span class="note">'
+                         f'{"write, always" if t.kind == "write" else "read, opted in"}</span></div>' for t in audited)
+        audit_cell = (f'<details class="audited"><summary>{len(audited)} tool{"s" if len(audited) != 1 else ""} audited</summary>'
+                      f'{listed}</details>' if audited else '<span class="note">Nothing audited</span>')
         trail = f'<a href="/audit/{html.escape(a["name"])}">{counts.get(a["name"], 0)} entries</a>'
         conns = " ".join(tag(c, config.connector_group(c)) for c in a["connectors"]) or "—"
         return (f'<tr><td><strong>{html.escape(a["title"])}</strong><div class="note">{html.escape(a["name"])}</div></td>'
                 f'<td>{status}</td><td>{conns}</td><td>{grants}</td>'
-                f'<td>{"writes: " + str(len(set(writes))) + "<br>" if writes else ""}reads: {reads}<br>{trail}</td></tr>')
+                f'<td>{audit_cell}<div class="note">{trail}</div></td></tr>')
     app_rows = "".join(app_row(a) for a in apps.values())
 
     crumbs = '<span class="crumb">/</span><span class="here">Admin</span>'
