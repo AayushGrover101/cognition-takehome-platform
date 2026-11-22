@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 APPS_DIR = Path(os.environ.get("APPS_DIR", ROOT.parent / "cognition-takehome-apps"))
 POLICY = yaml.safe_load((ROOT / "policy.yaml").read_text())
 ROLES = POLICY["roles"]
-GROUPS = ("internal", "external", "blocked")
+GROUPS = ("business", "non-business", "blocked")
 
 
 def users():
@@ -39,11 +39,11 @@ def connector_problems(declared):
     problems = [f"Unknown connector: {c}" for c in declared if c not in connectors()]
     known = [c for c in declared if c in connectors()]
     problems += [f"Connector {c} is Blocked" for c in known if connector_group(c) == "blocked"]
-    internal = [c for c in known if connector_group(c) == "internal"]
-    external = [c for c in known if connector_group(c) == "external"]
-    if internal and external:
-        problems.append(f"An app can't combine Internal ({', '.join(internal)}) and External "
-                        f"({', '.join(external)}) connectors")
+    business = [c for c in known if connector_group(c) == "business"]
+    non_business = [c for c in known if connector_group(c) == "non-business"]
+    if business and non_business:
+        problems.append(f"An app can't combine Business ({', '.join(business)}) and Non-business "
+                        f"({', '.join(non_business)}) connectors")
     return problems
 
 

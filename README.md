@@ -29,7 +29,7 @@ python3 -m pytest tests
 | Piece | Where | What it does |
 | --- | --- | --- |
 | Connectors | `gateway/connectors/<name>.py` | One per system. Each tool has a name, inputs, the fields it returns and whether it reads or writes. Engineers write them; they hold the credentials (made-up data here). |
-| Connector groups | `policy.yaml` → `connectors` | Internal, External or Blocked. A connector not listed counts as Blocked. |
+| Connector groups | `policy.yaml` → `connectors` | Business, Non-business or Blocked. A connector not listed counts as Blocked. |
 | Tool calls | `POST /api/<app>/<connector>.<tool>` | Checks sign-in, app access, that the tool's connector is declared by the app, that the role is granted the tool, and the inputs. Returns only the declared fields. |
 | Client | `/web/gateway.js` | `gateway.call('kyc.get_case', {case_id})` and `gateway.me()`. Refusals throw an `Error` with the reason. |
 
@@ -39,7 +39,7 @@ python3 -m pytest tests
 title: KYC review queue
 description: Review and decide pending KYC cases.
 access: [kyc_analyst, compliance_officer]   # roles that can open the app
-connectors: [kyc]                    # can't mix Internal and External; Blocked is refused
+connectors: [kyc]                    # can't mix Business and Non-business; Blocked is refused
 roles:                               # tools per role; anything not granted is denied
   kyc_analyst:
     tools: [kyc.list_cases, kyc.get_case, kyc.escalate_case]
