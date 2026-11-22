@@ -28,3 +28,11 @@ def test_admins_are_marked_in_sign_in_and_top_bar(gateway):
     assert "Sam Kim — Platform Engineer · Admin" in signin and "Priya Shah — KYC Analyst</option>" in signin
     assert '<span class="tag">Admin</span>' in gateway("sam").get("/").text
     assert '<span class="tag">Admin</span>' not in gateway("priya").get("/").text
+
+
+def test_admin_lists_exactly_which_tools_are_audited(gateway):
+    text = gateway("sam").get("/admin").text
+    assert "tools audited</summary>" in text
+    assert "<code>kyc.get_case_full</code> <span class=\"note\">read, opted in</span>" in text
+    assert "<code>kyc.decide_case</code> <span class=\"note\">write, always</span>" in text
+    assert "<code>kyc.get_case</code> <span class=\"note\">" not in text
