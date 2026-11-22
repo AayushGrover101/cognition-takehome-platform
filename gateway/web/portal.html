@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apps · Internal tools</title><link rel="stylesheet" href="/web/base.css"></head>
+<body>
+<header class="top">
+<a class="brand" href="/"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect width="22" height="22" rx="6" fill="#111"/><path d="M7 15.5V6.5M11 15.5V9.5M15 15.5V12" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>Internal tools</a><span class="crumb">/</span><span class="here">Apps</span>
+<span class="spacer"></span>
+<div class="who"><span class="avatar">{{initials}}</span><span class="name">{{user}}</span><span class="role">{{role}}</span></div>
+<span class="divider"></span>
+<form method="post" action="/signout"><button class="btn ghost" type="submit">Sign out</button></form>
+</header>
+<main class="wrap">
+<p class="eyebrow">Workspace</p>
+<h1>Welcome back, {{first}}</h1>
+<p class="sub">The tools your role can use. Access is managed by your engineering team.</p>
+<div class="section-head"><span>Apps</span><span>{{count}}</span></div>
+{{cards}}
+</main>
+</body></html>
