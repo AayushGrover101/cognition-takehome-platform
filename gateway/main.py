@@ -296,11 +296,14 @@ async def audit_page(request):
         return notice("You can't view this audit trail",
                       [f"Signed in as {user['name']} ({label(user['role'])}).",
                        "Roles listed in the app's audit_viewers, and platform admins, can view it."], 403)
-    audit.prune(app["name"], app["audit_retention_days"])
+    if app["audit_retention_days"]:
+        audit.prune(app["name"], app["audit_retention_days"])
     ok, broken = audit.verify(app["name"])
     chain = ('<span class="tag allowed">Chain intact</span>' if ok else
              f'<span class="tag refused">Chain broken at entry {broken}</span>')
-    reads = ", ".join(app["audit_reads"]) or "none"
+    listed = ", ".join(app["audit"]) or "nothing"
+    kept = (f'Kept for {app["audit_retention_days"]} days.' if app["audit_retention_days"]
+            else "Kept until the app sets audit_retention_days.")
     crumbs = (f'<span class="crumb">/</span><span class="here">{html.escape(app["title"])}</span>'
               f'<span class="crumb">/</span><span class="here">Audit trail</span>')
     q = request.query_params
@@ -322,7 +325,7 @@ async def audit_page(request):
                + '</form>')
     shown = f'{len(rows)} matching' if any(chosen.values()) else f'{len(rows)} entries'
     return page("audit.html", topbar=topbar(user, crumbs), title=html.escape(app["title"]), chain=chain,
-                reads=html.escape(reads), retention=str(app["audit_retention_days"]), filters=filters,
+                listed=html.escape(listed), kept=kept, filters=filters,
                 shown=shown, rows=audit_rows(rows))
 
 

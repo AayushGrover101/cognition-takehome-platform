@@ -8,7 +8,7 @@ def call(client, tool, inputs=None, app="kyc-demo"):
     return client.post(f"/api/{app}/{tool}", json=inputs or {})
 
 
-def test_reads_are_not_audited_unless_the_app_opts_in(gateway):
+def test_reads_are_not_audited_unless_listed(gateway):
     priya = gateway("priya")
     call(priya, "kyc.list_cases", {"status": "any"})
     call(priya, "kyc.get_case", {"case_id": "KYC-1001"})
@@ -18,7 +18,7 @@ def test_reads_are_not_audited_unless_the_app_opts_in(gateway):
     assert (row["user_name"], row["tool"], row["kind"], row["outcome"]) == ("Dana Ortiz", "kyc.get_case_full", "read", "ok")
 
 
-def test_writes_are_always_audited_including_refusals(gateway):
+def test_listed_writes_are_audited_including_refusals(gateway):
     dana, priya = gateway("dana"), gateway("priya")
     call(dana, "kyc.decide_case", {"case_id": "KYC-1001", "decision": "approve", "reason": "Docs verified"})
     call(dana, "kyc.decide_case", {"case_id": "KYC-1001", "decision": "reject", "reason": "Changed my mind"})
@@ -67,7 +67,7 @@ def test_audit_page_is_for_audit_viewers_and_admins_only(gateway):
 
 def test_audit_settings_are_checked(gateway):
     text = gateway("priya").get("/apps/bad-grants/").text
-    assert "audit_reads: unknown tool kyc.nope" in text and "Unknown role in audit_viewers: wizard" in text
+    assert "audit: unknown tool kyc.nope" in text and "Unknown role in audit_viewers: wizard" in text
 
 
 def test_entries_across_apps_are_newest_first(gateway):
@@ -121,12 +121,20 @@ def test_chain_continues_after_everything_is_pruned(gateway, monkeypatch):
     assert [r["seq"] for r in audit.entries("x")] == [2] and audit.verify("x") == (True, None)
 
 
-def test_retention_is_validated_against_the_company_minimum():
+def test_nothing_is_audited_unless_listed_writes_included():
     from gateway import config
-    assert config.app_problems({"title": "t", "access": ["engineer"], "audit_retention_days": 30}) == [
-        "audit_retention_days must be a whole number of days, at least 1825"]
-    assert config.app_problems({"title": "t", "access": ["engineer"], "audit_retention_days": 3650}) == []
-    assert config.load_apps()["kyc-demo"]["audit_retention_days"] == 2555
+    from gateway.connectors import TOOLS
+    write = TOOLS["kyc.decide_case"]
+    assert write.kind == "write" and not config.audited({"audit": []}, write)
+    assert config.audited({"audit": ["kyc.*"]}, write)
+
+
+def test_retention_is_optional_and_any_positive_number_of_days():
+    from gateway import config
+    assert config.app_problems({"title": "t", "access": ["engineer"], "audit_retention_days": 0}) == [
+        "audit_retention_days must be a whole number of days"]
+    assert config.app_problems({"title": "t", "access": ["engineer"], "audit_retention_days": 30}) == []
+    assert config.load_apps()["kyc-demo"]["audit_retention_days"] is None
 
 
 def test_prune_keeps_unexpired_entries_even_if_clocks_went_backwards(gateway, monkeypatch):
