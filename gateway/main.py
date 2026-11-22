@@ -364,7 +364,7 @@ async def admin_page(request):
                         for t in connectors.TOOLS.values() if t.connector == name)
         used = ", ".join(html.escape(a["title"]) for a in apps.values() if name in a["connectors"]) or "—"
         control = state(off_conns.get(name)) if group != "blocked" else '<span class="note">Blocked by policy</span>'
-        return (f'<tr><td><strong>{html.escape(name)}</strong></td><td>{tag(group.title(), group)}</td><td>{tools}</td>'
+        return (f'<tr><td><strong>{html.escape(name)}</strong></td><td>{tag(group.capitalize(), group)}</td><td>{tools}</td>'
                 f'<td>{used}</td><td>{control}</td></tr>')
     conns = "".join(connector_row(c) for c in connectors.connectors())
 
