@@ -9,7 +9,7 @@ import os
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +29,8 @@ def db(write=False):
         conn.execute("""CREATE TABLE IF NOT EXISTS audit (
             app TEXT, seq INTEGER, at TEXT, user_id TEXT, user_name TEXT, role TEXT, tool TEXT, kind TEXT,
             inputs TEXT, outcome TEXT, detail TEXT, prev_hash TEXT, hash TEXT, PRIMARY KEY (app, seq))""")
+        # Where each app's chain starts after retention deleted its oldest entries.
+        conn.execute("CREATE TABLE IF NOT EXISTS pruned (app TEXT PRIMARY KEY, through_seq INTEGER, last_hash TEXT)")
         if write:
             conn.execute("BEGIN IMMEDIATE")
         yield conn
@@ -47,36 +49,83 @@ def digest(prev_hash, row):
     return hashlib.sha256(body.encode()).hexdigest()
 
 
-def record(app, user, tool, kind, inputs, outcome, detail=""):
-    """outcome: 'ok' or 'refused'. detail: the refusal reason."""
+def now():
+    return datetime.now(timezone.utc)
+
+
+def stamp(t):
+    return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def chain_start(conn, app):
+    p = conn.execute("SELECT through_seq, last_hash FROM pruned WHERE app = ?", (app,)).fetchone()
+    return (p["through_seq"], p["last_hash"]) if p else (0, "")
+
+
+def record(app, user, tool, kind, inputs, outcome, detail="", retention_days=None):
+    """outcome: 'ok' or 'refused'. detail: the refusal reason. Entries older than retention_days are deleted."""
     with LOCK, db(write=True) as conn:
         last = conn.execute("SELECT seq, hash FROM audit WHERE app = ? ORDER BY seq DESC LIMIT 1", (app,)).fetchone()
+        start_seq, start_hash = chain_start(conn, app)
         row = {
-            "app": app, "seq": (last["seq"] + 1) if last else 1,
-            "at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "app": app, "seq": (last["seq"] if last else start_seq) + 1,
+            "at": stamp(now()),
             "user_id": user["id"], "user_name": user["name"], "role": user["role"], "tool": tool, "kind": kind,
             "inputs": json.dumps(inputs, sort_keys=True), "outcome": outcome, "detail": detail or "",
         }
-        prev = last["hash"] if last else ""
+        prev = last["hash"] if last else start_hash
         row["prev_hash"], row["hash"] = prev, digest(prev, row)
         conn.execute(f"INSERT INTO audit ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})", list(row.values()))
+        if retention_days:
+            _prune(conn, app, retention_days)
 
 
-def entries(app=None, limit=200):
+def _prune(conn, app, days):
+    cutoff = stamp(now() - timedelta(days=days))
+    old = conn.execute("SELECT seq, hash FROM audit WHERE app = ? AND at < ? ORDER BY seq DESC LIMIT 1",
+                       (app, cutoff)).fetchone()
+    if old:
+        conn.execute("DELETE FROM audit WHERE app = ? AND seq <= ?", (app, old["seq"]))
+        conn.execute("INSERT OR REPLACE INTO pruned VALUES (?, ?, ?)", (app, old["seq"], old["hash"]))
+
+
+def prune(app, days):
+    with LOCK, db(write=True) as conn:
+        _prune(conn, app, days)
+
+
+def entries(app=None, limit=200, user=None, tool=None, kind=None, outcome=None, q=None):
+    """Newest first. Filters match exactly; q searches people, tools, inputs and reasons."""
+    where, args = [], []
+    for column, value in (("app", app), ("user_id", user), ("tool", tool), ("kind", kind), ("outcome", outcome)):
+        if value:
+            where.append(f"{column} = ?"); args.append(value)
+    if q:
+        like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        where.append("(" + " OR ".join(f"{c} LIKE ? ESCAPE '\\'" for c in ("user_name", "role", "tool", "inputs", "detail")) + ")")
+        args += [like] * 5
+    sql = "SELECT * FROM audit" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY rowid DESC LIMIT ?"
     with db() as conn:
-        where, args = ("WHERE app = ?", [app]) if app else ("", [])
-        rows = conn.execute(f"SELECT * FROM audit {where} ORDER BY rowid DESC LIMIT ?", args + [limit])
-        return [dict(r, inputs=json.loads(r["inputs"])) for r in rows]
+        return [dict(r, inputs=json.loads(r["inputs"])) for r in conn.execute(sql, args + [limit])]
+
+
+def facets(app):
+    """People and tools that appear in an app's trail, for the filter menus."""
+    with db() as conn:
+        people = {r["user_id"]: r["user_name"] for r in
+                  conn.execute("SELECT DISTINCT user_id, user_name FROM audit WHERE app = ? ORDER BY user_name", (app,))}
+        tools = [r["tool"] for r in conn.execute("SELECT DISTINCT tool FROM audit WHERE app = ? ORDER BY tool", (app,))]
+    return people, tools
 
 
 def verify(app):
     """Recompute the app's chain. Returns (True, None) or (False, first seq that doesn't match)."""
     with db() as conn:
-        prev = ""
+        seq, prev = chain_start(conn, app)
         for r in conn.execute("SELECT * FROM audit WHERE app = ? ORDER BY seq", (app,)):
-            if r["prev_hash"] != prev or digest(prev, r) != r["hash"]:
+            if r["seq"] != seq + 1 or r["prev_hash"] != prev or digest(prev, r) != r["hash"]:
                 return False, r["seq"]
-            prev = r["hash"]
+            seq, prev = r["seq"], r["hash"]
     return True, None
 
 
@@ -88,3 +137,4 @@ def counts():
 def clear():
     with LOCK, db(write=True) as conn:
         conn.execute("DELETE FROM audit")
+        conn.execute("DELETE FROM pruned")

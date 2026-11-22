@@ -6,7 +6,10 @@
 <main class="wrap wide">
 <p class="eyebrow">Audit trail</p>
 <h1>{{title}}</h1>
-<p class="sub">Every write in this app, plus the reads it opted into ({{reads}}). Newest first. {{chain}}</p>
+<p class="sub">Every write in this app, plus the reads listed in its audit_reads ({{reads}}).
+Kept for {{retention}} days. {{chain}}</p>
+{{filters}}
+<p class="count">{{shown}}, newest first</p>
 {{rows}}
 </main>
 </body></html>

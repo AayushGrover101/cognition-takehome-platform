@@ -216,7 +216,8 @@ async def call_tool(request):
         return refuse(404, f"This app has no tool called {name}")
     def log(outcome, detail="", inputs=None):
         if config.audited(app, tool):
-            audit.record(app["name"], user, name, tool.kind, inputs or {}, outcome, detail)
+            audit.record(app["name"], user, name, tool.kind, inputs or {}, outcome, detail,
+                         retention_days=app["audit_retention_days"])
 
     if name not in config.tools_for(app, user["role"]):
         error = f"Your role ({label(user['role'])}) can't use {name} in this app"
@@ -283,14 +284,34 @@ async def audit_page(request):
         return notice("You can't view this audit trail",
                       [f"Signed in as {user['name']} ({label(user['role'])}).",
                        "Roles listed in the app's audit_viewers, and platform admins, can view it."], 403)
+    audit.prune(app["name"], app["audit_retention_days"])
     ok, broken = audit.verify(app["name"])
     chain = ('<span class="tag allowed">Chain intact</span>' if ok else
              f'<span class="tag refused">Chain broken at entry {broken}</span>')
     reads = ", ".join(app["audit_reads"]) or "none"
     crumbs = (f'<span class="crumb">/</span><span class="here">{html.escape(app["title"])}</span>'
               f'<span class="crumb">/</span><span class="here">Audit trail</span>')
+    q = request.query_params
+    chosen = {k: q.get(k, "").strip() for k in ("user", "tool", "kind", "outcome", "q")}
+    people, tools = audit.facets(app["name"])
+    rows = audit.entries(app["name"], limit=500, **{k: v or None for k, v in chosen.items()})
+
+    def menu(name, blank, options):
+        opts = "".join(f'<option value="{html.escape(v)}"{" selected" if chosen[name] == v else ""}>{html.escape(t)}</option>'
+                       for v, t in [("", blank)] + list(options))
+        return f'<select name="{name}" aria-label="{html.escape(blank)}">{opts}</select>'
+    filters = (f'<form class="filters" method="get" action="/audit/{html.escape(app["name"])}">'
+               f'<input type="search" name="q" value="{html.escape(chosen["q"])}" placeholder="Search people, tools, inputs, reasons">'
+               + menu("user", "Anyone", people.items()) + menu("tool", "Any tool", [(t, t) for t in tools])
+               + menu("kind", "Reads and writes", [("read", "Reads"), ("write", "Writes")])
+               + menu("outcome", "Any result", [("ok", "OK"), ("refused", "Refused")])
+               + '<button class="btn" type="submit">Filter</button>'
+               + (f'<a class="btn ghost" href="/audit/{html.escape(app["name"])}">Clear</a>' if any(chosen.values()) else "")
+               + '</form>')
+    shown = f'{len(rows)} matching' if any(chosen.values()) else f'{len(rows)} entries'
     return page("audit.html", topbar=topbar(user, crumbs), title=html.escape(app["title"]), chain=chain,
-                reads=html.escape(reads), rows=audit_rows(audit.entries(app["name"])))
+                reads=html.escape(reads), retention=str(app["audit_retention_days"]), filters=filters,
+                shown=shown, rows=audit_rows(rows))
 
 
 async def csp_report(request):
@@ -326,33 +347,50 @@ async def admin_page(request):
         return f'<tr><td><strong>{html.escape(name)}</strong></td><td>{tag(group.title(), group)}</td><td>{tools}</td><td>{used}</td></tr>'
     conns = "".join(connector_row(c) for c in connectors.connectors())
 
-    def app_row(a):
-        if a["problems"]:
-            status = tag("Not published", "refused") + "".join(f'<div class="note">{html.escape(p)}</div>' for p in a["problems"])
-        else:
-            status = tag("Published", "published")
+    def app_parts(a):
+        name = html.escape(a["name"])
+        status = tag("Not published", "refused") if a["problems"] else tag("Published", "published")
+        problems = "".join(f'<div class="note">{html.escape(p)}</div>' for p in a["problems"])
         grants = "".join(
             f'<div><strong>{html.escape(label(r))}</strong>: '
             f'{", ".join(f"<code>{html.escape(t)}</code>" for t in config.tools_for(a, r)) or "<span class=note>no tools</span>"}</div>'
-            for r in a["access"] if r in config.ROLES) if not a["problems"] else "—"
+            for r in a["access"] if r in config.ROLES) if not a["problems"] else '<span class="note">—</span>'
         granted = [] if a["problems"] else sorted({t for r in a["access"] for t in config.tools_for(a, r)})
         # Every tool on the app's connectors that the gateway would log, including refused attempts at ungranted ones.
         audited = [] if a["problems"] else [t for t in connectors.TOOLS.values()
                                             if t.connector in a["connectors"] and config.audited(a, t)]
         listed = "".join(f'<div><code>{html.escape(t.name)}</code> <span class="note">'
-                         f'{"write, always" if t.kind == "write" else "read, opted in"}'
+                         f'{"write, always" if t.kind == "write" else "read, listed in audit_reads"}'
                          f'{"" if t.name in granted else "; no role granted, refusals only"}</span></div>' for t in audited)
-        audit_cell = (f'<details class="audited"><summary>{len(audited)} tool{"s" if len(audited) != 1 else ""} audited</summary>'
-                      f'{listed}</details>' if audited else '<span class="note">Nothing audited</span>')
-        trail = f'<a href="/audit/{html.escape(a["name"])}">{counts.get(a["name"], 0)} entries</a>'
         conns = " ".join(tag(c, config.connector_group(c)) for c in a["connectors"]) or "—"
-        return (f'<tr><td><strong>{html.escape(a["title"])}</strong><div class="note">{html.escape(a["name"])}</div></td>'
-                f'<td>{status}</td><td>{conns}</td><td>{grants}</td>'
-                f'<td>{audit_cell}<div class="note">{trail}</div></td></tr>')
-    app_rows = "".join(app_row(a) for a in apps.values())
+        viewers = ", ".join(html.escape(label(r)) for r in a["audit_viewers"]) or "none"
+        n = counts.get(a["name"], 0)
+        row = (f'<tr class="clickable" data-dialog="app-{name}" tabindex="0">'
+               f'<td><strong>{html.escape(a["title"])}</strong><div class="note">{name}</div></td>'
+               f'<td>{status}</td><td>{conns}</td>'
+               f'<td>{len(audited)} tool{"s" if len(audited) != 1 else ""}</td><td class="num">{n}</td></tr>')
+
+        def item(title, body):
+            return f'<div class="item"><div class="item-label">{title}</div><div>{body}</div></div>'
+        dialog = (f'<dialog id="app-{name}" class="modal"><div class="modal-head"><div><p class="eyebrow">{name}</p>'
+                  f'<h2>{html.escape(a["title"])}</h2></div>{status}'
+                  f'<button class="btn ghost" data-close aria-label="Close">Close</button></div>'
+                  + (item("Why it isn't published", problems) if problems else "")
+                  + item("Description", html.escape(a.get("description") or "—"))
+                  + item("Connectors", conns)
+                  + item("Tools per role", grants)
+                  + item("Audited tools", listed or '<span class="note">Nothing audited</span>')
+                  + item("Audit retention", f'{a["audit_retention_days"]} days')
+                  + item("Can view the trail", f'{viewers}, and platform admins')
+                  + f'<div class="section-head gap"><span>Latest calls</span>'
+                  f'<a href="/audit/{name}">Search all {n} entries →</a></div>'
+                  + audit_rows(audit.entries(a["name"], limit=10)) + '</dialog>')
+        return row, dialog
+    parts = [app_parts(a) for a in apps.values()]
+    app_rows, dialogs = "".join(r for r, _ in parts), "".join(d for _, d in parts)
 
     crumbs = '<span class="crumb">/</span><span class="here">Admin</span>'
-    return page("admin.html", topbar=topbar(user, crumbs), people=people, connectors=conns, apps=app_rows,
+    return page("admin.html", topbar=topbar(user, crumbs), people=people, connectors=conns, apps=app_rows, dialogs=dialogs,
                 activity=audit_rows(audit.entries(limit=50), show_app=True))
 
 
