@@ -208,7 +208,8 @@ async def call(request):
         params = json.loads(await request.body() or b"{}")
     except ValueError:
         params = None
-    if not isinstance(params, dict):
+    malformed = not isinstance(params, dict)
+    if malformed:
         params = {}
     app = config.load_apps().get(app_name)
     op = config.OPERATIONS.get(operation)
@@ -242,7 +243,7 @@ async def call(request):
         return refuse(403, f"Role {user['role']} may not use this app")
     if user["role"] not in op["roles"]:
         return refuse(403, f"Role {user['role']} may not run {operation}")
-    clean = validate(op, params)
+    clean = "Inputs must be a JSON object" if malformed else validate(op, params)
     if isinstance(clean, str):
         return refuse(400, clean)
     try:
