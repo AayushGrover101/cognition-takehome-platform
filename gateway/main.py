@@ -7,6 +7,7 @@ import html
 import json
 import os
 import subprocess
+from starlette.concurrency import run_in_threadpool
 from pathlib import Path
 
 from starlette.applications import Starlette
@@ -384,11 +385,11 @@ async def admin_api(request):
         return done("admin.set_user_role", {"user": target, "role": role})
     if action == "sync-apps":
         try:
-            out = subprocess.run(["git", "-C", str(config.APPS_DIR), "pull", "--ff-only"], capture_output=True,
-                                 text=True, timeout=60)
-            message = (out.stdout + out.stderr).strip()[-400:]
+            out = await run_in_threadpool(subprocess.run, ["git", "-C", str(config.APPS_DIR), "pull", "--ff-only"],
+                                          capture_output=True, text=True, timeout=60)
+            message, failed = (out.stdout + out.stderr).strip()[-400:], out.returncode != 0
         except (OSError, subprocess.SubprocessError) as e:
-            message = str(e)
+            message, failed = str(e), True
         return done("admin.sync_apps", {}, message=message)
     if action == "reset-data":
         handlers.reset_data()
