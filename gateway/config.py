@@ -34,7 +34,7 @@ def load_apps():
     for path in sorted((APPS_DIR / "apps").glob("*/app.yaml")):
         try:
             manifest = yaml.safe_load(path.read_text())
-        except yaml.YAMLError:
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
             manifest = None
         problems = app_problems(manifest)
         manifest = manifest if isinstance(manifest, dict) else {}

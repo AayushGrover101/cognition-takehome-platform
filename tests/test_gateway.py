@@ -60,3 +60,9 @@ def test_me_returns_user_and_app_only_to_people_with_access(gateway):
     assert data == {"user": {"name": "Dana Ortiz", "role": "senior_reviewer"},
                     "app": {"name": "kyc-demo", "title": "KYC demo"}}
     assert gateway("marcus").get("/api/kyc-demo/_me").status_code == 403
+
+
+def test_unreadable_manifest_only_breaks_that_app(gateway):
+    assert gateway("priya").get("/").status_code == 200
+    assert gateway("priya").get("/apps/kyc-demo/").status_code == 200
+    assert gateway("priya").get("/apps/bad-encoding/").status_code == 403
