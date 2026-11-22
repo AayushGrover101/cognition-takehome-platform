@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in</title><link rel="stylesheet" href="/web/base.css"></head>
+<body><div class="narrow">
+<h1>Sign in</h1>
+<p class="muted">Stand-in for company single sign-on. Pick who to be. In production your identity and role come from the company sign-in and cannot be chosen.</p>
+<form method="post" action="/signin" class="list">
+<input type="hidden" name="next" value="{{next}}">
+{{rows}}
+</form>
+</div></body></html>

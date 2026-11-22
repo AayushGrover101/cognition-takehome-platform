@@ -1,0 +1,10 @@
+# Who exists and which role each person has. Stand-in for the company identity provider.
+roles: [analyst, senior_reviewer, ops, support, support_lead, admin]
+
+users:
+  - {id: priya,  name: Priya Shah,  role: analyst}
+  - {id: dana,   name: Dana Ortiz,  role: senior_reviewer}
+  - {id: omar,   name: Omar Haddad, role: ops}
+  - {id: marcus, name: Marcus Lee,  role: support}
+  - {id: lena,   name: Lena Novak,  role: support_lead}
+  - {id: sam,    name: Sam Kim,     role: admin}

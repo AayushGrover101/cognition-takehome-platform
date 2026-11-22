@@ -1,0 +1,179 @@
+"""The gateway: sign-in, the portal, and serving app files to people allowed to open them."""
+import html
+import os
+from pathlib import Path
+
+from starlette.applications import Starlette
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from starlette.routing import Route
+
+from . import config
+
+WEB = Path(__file__).parent / "web"
+STATIC_TYPES = {".html", ".js", ".css", ".svg", ".png", ".jpg", ".ico", ".woff2"}
+COOKIE = "gw_user"
+
+
+# ---------- sign-in (stand-in for company single sign-on) ----------
+
+def current_user(request):
+    return config.users().get(request.cookies.get(COOKIE, ""))
+
+
+def label(role):
+    return role.replace("_", " ")
+
+
+def page(name, status=200, **values):
+    text = (WEB / name).read_text()
+    for key, value in values.items():
+        text = text.replace("{{" + key + "}}", value)
+    return HTMLResponse(text, status_code=status)
+
+
+def notice(title, lines, status):
+    items = "".join(f"<li>{html.escape(line)}</li>" for line in lines)
+    return page("notice.html", status, title=html.escape(title), items=items)
+
+
+def safe_next(value):
+    ok = value and value.startswith("/") and not value.startswith("//") and "\\" not in value
+    return value if ok and all(ord(ch) >= 32 for ch in value) else "/"
+
+
+async def signin(request):
+    if request.method == "POST":
+        form = await request.form()
+        user_id, nxt = form.get("user", ""), safe_next(form.get("next", "/"))
+        if user_id not in config.users():
+            return RedirectResponse("/signin", status_code=303)
+        response = RedirectResponse(nxt, status_code=303)
+        response.set_cookie(COOKIE, user_id, httponly=True, samesite="lax")
+        return response
+    nxt = safe_next(request.query_params.get("next", "/"))
+    me = current_user(request)
+    rows = "".join(
+        f'<button class="row" name="user" value="{html.escape(u["id"])}">'
+        f'<span class="who">{html.escape(u["name"])}</span>'
+        f'<span class="muted">{html.escape(label(u["role"]))}</span>'
+        f'{"<span class=tag>current</span>" if me and me["id"] == u["id"] else ""}</button>'
+        for u in config.users().values()
+    )
+    return page("signin.html", rows=rows, next=html.escape(nxt, quote=True))
+
+
+def can_open(user, app):
+    return not app["problems"] and user["role"] in app["access"]
+
+
+async def portal(request):
+    user = current_user(request)
+    if not user:
+        return RedirectResponse("/signin", status_code=303)
+    cards = "".join(
+        f'<a class="card" href="/apps/{html.escape(app["name"])}/"><div class="title">{html.escape(app["title"])}</div>'
+        f'<div class="muted">{html.escape(str(app.get("description", "")))}</div></a>'
+        for app in config.load_apps().values() if can_open(user, app)
+    ) or '<p class="muted">No apps are available for your role yet.</p>'
+    return page("portal.html", cards=cards, user=html.escape(user["name"]), role=html.escape(label(user["role"])))
+
+
+# ---------- serving apps (static files only) ----------
+
+def public_origin(request):
+    if os.environ.get("PUBLIC_ORIGIN"):
+        return os.environ["PUBLIC_ORIGIN"].rstrip("/")
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", "")).split(",")[0].strip()
+    return f"{proto}://{host}"
+
+
+def app_csp(request, app_name):
+    """Browser lockdown: load files only from here, and send requests only to this app's own /api path."""
+    return (
+        "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
+        f"connect-src {public_origin(request)}/api/{app_name}/; "
+        "form-action 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; "
+        "sandbox allow-scripts allow-same-origin allow-downloads allow-modals; "
+        "report-uri /csp-report"
+    )
+
+
+def static_file(root, rel):
+    root = root.resolve()
+    target = (root / rel).resolve()
+    if root not in target.parents or not target.is_file() or target.suffix.lower() not in STATIC_TYPES:
+        return None
+    return target
+
+
+async def serve_app(request):
+    name, rel = request.path_params["app"], request.path_params.get("path") or "index.html"
+    user = current_user(request)
+    if not user:
+        return RedirectResponse(f"/signin?next=/apps/{name}/", status_code=303)
+    app = config.load_apps().get(name)
+    if not app:
+        return notice("App not found", [f"There is no app called {name}."], 404)
+    if app["problems"]:
+        return notice("This app is not published", app["problems"], 403)
+    if user["role"] not in app["access"]:
+        return notice("You don't have access to this app",
+                      [f"Signed in as {user['name']} ({label(user['role'])})."], 403)
+    target = static_file(config.APPS_DIR / "apps" / name, rel)
+    if not target:
+        return notice("Not found", [rel], 404)
+    return FileResponse(target, headers={"Content-Security-Policy": app_csp(request, name),
+                                         "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+async def serve_shared(request):
+    target = static_file(config.APPS_DIR / "shared", request.path_params["path"])
+    if not target or target.suffix.lower() == ".html":
+        return JSONResponse({"error": "not found"}, status_code=404)
+    # Shared files are only loaded by app pages. Opened directly, they may not run or load anything.
+    return FileResponse(target, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
+                                         "Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
+async def web_static(request):
+    target = static_file(WEB, request.path_params["path"])
+    if not target or target.suffix.lower() == ".html":
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return FileResponse(target, headers={"Cache-Control": "no-store"})
+
+
+# ---------- what an app can ask about the signed-in person ----------
+
+async def me(request):
+    user = current_user(request)
+    if not user:
+        return JSONResponse({"ok": False, "error": "Not signed in"}, status_code=401)
+    app = config.load_apps().get(request.path_params["app"])
+    if not app or not can_open(user, app):
+        return JSONResponse({"ok": False, "error": "You don't have access to this app"}, status_code=403)
+    return JSONResponse({"ok": True, "data": {
+        "user": {"name": user["name"], "role": user["role"]},
+        "app": {"name": app["name"], "title": app["title"]},
+    }})
+
+
+async def csp_report(request):
+    """Browsers post here when the lockdown blocks something. Recorded once the audit log exists."""
+    return Response(status_code=204)
+
+
+def create_app():
+    return Starlette(routes=[
+        Route("/", portal),
+        Route("/signin", signin, methods=["GET", "POST"]),
+        Route("/apps/{app}/", serve_app),
+        Route("/apps/{app}/{path:path}", serve_app),
+        Route("/shared/{path:path}", serve_shared),
+        Route("/web/{path:path}", web_static),
+        Route("/api/{app}/_me", me),
+        Route("/csp-report", csp_report, methods=["POST"]),
+    ])
+
+
+app = create_app()
