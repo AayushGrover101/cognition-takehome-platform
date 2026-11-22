@@ -420,7 +420,6 @@ async def admin_page(request):
 
     crumbs = '<span class="crumb">/</span><span class="here">Admin</span>'
     return page("admin.html", topbar=topbar(user, crumbs), people=people, connectors=conns, apps=app_rows, dialogs=dialogs,
-                changes=audit_rows(audit.entries(switches.PLATFORM_TRAIL, limit=50)),
                 activity=audit_rows(audit.entries(limit=50), show_app=True))
 
 
