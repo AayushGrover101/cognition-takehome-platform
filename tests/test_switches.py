@@ -45,3 +45,12 @@ def test_only_admins_using_the_admin_page_can_flip_switches(gateway):
     assert flip(sam, "app", "kyc-demo", False, "").status_code == 400
     assert flip(sam, "app", "nope", False, "x").status_code == 404
     assert switches.off("app") == {}
+
+
+def test_reserved_names_are_not_apps(tmp_path, monkeypatch):
+    import shutil
+    from gateway import config
+    shutil.copytree(config.APPS_DIR, tmp_path / "repo")
+    shutil.copytree(tmp_path / "repo" / "apps" / "kyc-demo", tmp_path / "repo" / "apps" / switches.PLATFORM_TRAIL)
+    monkeypatch.setattr(config, "APPS_DIR", tmp_path / "repo")
+    assert switches.PLATFORM_TRAIL not in config.load_apps() and "kyc-demo" in config.load_apps()

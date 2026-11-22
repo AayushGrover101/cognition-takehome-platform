@@ -1,5 +1,6 @@
 """Where things live: people and roles (policy.yaml) and the apps (a checkout of the apps repo)."""
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -127,6 +128,8 @@ def load_apps():
     """Re-read on every request, so a merged app is live as soon as the checkout is updated."""
     apps = {}
     for path in sorted((APPS_DIR / "apps").glob("*/app.yaml")):
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", path.parent.name):
+            continue  # app names are lowercase letters, digits and dashes; others (e.g. "_platform") are reserved
         try:
             manifest = yaml.safe_load(path.read_text())
         except (OSError, UnicodeDecodeError, yaml.YAMLError):
