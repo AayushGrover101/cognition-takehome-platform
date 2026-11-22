@@ -62,11 +62,10 @@ def record(user, app, operation, inputs, outcome, reason="", record_id=None, ret
     }
     c = config.db()
     with config._lock:
-        last = c.execute(
-            "SELECT hash FROM (SELECT id, hash FROM audit UNION ALL SELECT id, hash FROM audit_removed) "
-            "ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        prev = last["hash"] if last else ""
+        # Two primary-key lookups; ids are never reused, so the higher one is the latest link in the chain.
+        tails = [c.execute(f"SELECT id, hash FROM {table} ORDER BY id DESC LIMIT 1").fetchone()
+                 for table in ("audit", "audit_removed")]
+        prev = max((t for t in tails if t), key=lambda t: t["id"], default={"hash": ""})["hash"]
         c.execute(
             f"INSERT INTO audit ({', '.join(FIELDS)}, prev_hash, hash) VALUES ({', '.join('?' * len(FIELDS))}, ?, ?)",
             [row[f] for f in FIELDS] + [prev, _hash(prev, row)],
