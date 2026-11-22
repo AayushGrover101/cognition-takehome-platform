@@ -58,12 +58,13 @@ decided) or 415 (not JSON).
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| What's recorded | `gateway/audit.py`, `config.audited` | Every **write** tool call, always. **Reads** only when the app lists them in `audit_reads`. Allowed calls and refusals (role not granted, or the system said no) are both recorded, with who, role, tool, inputs and result. The browser has no say. |
+| What's recorded | `gateway/audit.py`, `config.audited` | Nothing by default. Only calls to the tools (reads or writes) the app lists under `audit` in its `app.yaml`. Allowed calls and refusals (role not granted, or the system said no) are both recorded, with who, role, tool, inputs and result. The browser has no say. |
 | One trail per app | SQLite `audit` table, keyed by app | Each app has its own sequence and SHA-256 hash chain (each entry includes the previous entry's hash), so each trail can be checked on its own. Editing or deleting an entry breaks the chain from that point. |
 | Viewing | `/audit/<app>` | Roles in the app's `audit_viewers` and the platform's `admin_roles` (`policy.yaml`). Apps show an "Audit trail" link in the top bar for them. |
 
 ```yaml
-audit_reads: [kyc.get_case_full]     # reads are off unless listed; writes are always audited
+audit: [kyc.decide_case, kyc.escalate_case, kyc.get_case_full]   # nothing is audited unless listed
+audit_retention_days: 2555           # optional; without it entries are kept
 audit_viewers: [compliance_officer]  # who can see this app's trail
 ```
 

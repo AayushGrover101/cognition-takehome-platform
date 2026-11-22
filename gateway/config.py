@@ -22,17 +22,12 @@ def admin_roles():
 
 
 def audited(app, tool):
-    """Writes are always audited; reads only when app.yaml lists them in audit_reads."""
-    return tool.kind == "write" or any(grant_matches(p, tool.name) for p in app["audit_reads"])
-
-
-def retention_policy():
-    r = POLICY.get("audit_retention_days") or {}
-    return int(r.get("minimum", 1825)), int(r.get("default", 2555))
+    """Nothing is audited by default: only the tools (reads or writes) app.yaml lists under audit."""
+    return any(grant_matches(p, tool.name) for p in app["audit"])
 
 
 def valid_retention(value):
-    return isinstance(value, int) and not isinstance(value, bool) and value >= retention_policy()[0]
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def can_view_audit(user, app):
@@ -112,14 +107,14 @@ def app_problems(manifest):
     problems += connector_problems(declared)
     declared = declared if isinstance(declared, list) else []
     problems += grant_problems(manifest.get("roles", {}), access, declared)
-    problems += pattern_problems("audit_reads", manifest.get("audit_reads", []), declared)
+    problems += pattern_problems("audit", manifest.get("audit", []), declared)
     viewers = manifest.get("audit_viewers", [])
     if not isinstance(viewers, list):
         problems.append("audit_viewers must be a list of roles")
     else:
         problems += [f"Unknown role in audit_viewers: {r}" for r in viewers if r not in ROLES]
     if "audit_retention_days" in manifest and not valid_retention(manifest["audit_retention_days"]):
-        problems.append(f"audit_retention_days must be a whole number of days, at least {retention_policy()[0]}")
+        problems.append("audit_retention_days must be a whole number of days")
     return problems
 
 
@@ -140,10 +135,10 @@ def load_apps():
             "access": manifest.get("access") if isinstance(manifest.get("access"), list) else [],
             "connectors": manifest.get("connectors") if isinstance(manifest.get("connectors"), list) else [],
             "roles": manifest.get("roles") if isinstance(manifest.get("roles"), dict) else {},
-            "audit_reads": manifest.get("audit_reads") if isinstance(manifest.get("audit_reads"), list) else [],
+            "audit": manifest.get("audit") if isinstance(manifest.get("audit"), list) else [],
             "audit_viewers": manifest.get("audit_viewers") if isinstance(manifest.get("audit_viewers"), list) else [],
             "audit_retention_days": manifest["audit_retention_days"]
-            if valid_retention(manifest.get("audit_retention_days")) else retention_policy()[1],
+            if valid_retention(manifest.get("audit_retention_days")) else None,
             "problems": problems,
         }
     return apps
