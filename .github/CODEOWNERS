@@ -6,3 +6,4 @@
 /policy.yaml          @AayushGrover101
 # Turning things off or back on: add the on-call team here so these merge without waiting for the platform team.
 /switches.yaml        @AayushGrover101
+/app_risk.yaml        @AayushGrover101

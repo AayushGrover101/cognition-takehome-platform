@@ -90,3 +90,7 @@ which only restores what `app.yaml` grants. The file has its own CODEOWNERS line
 `python3 -m gateway.catalog > ../cognition-takehome-apps/platform/catalog.json` exports roles, admin roles,
 connector groups and every tool (kind, inputs, returned fields, description). The apps repo's publish checks and
 Devin read it, so they know what exists without importing gateway code.
+
+App risk lives in `app_risk.yaml`: apps listed under `low` publish code-only changes without review; every other
+app is high risk, so any change to it needs an engineer's approval (the apps repo's "Engineer approval" check).
+The level is exported as `app_risk` in the catalogue and shown in each app's pop-up on the admin page.

@@ -399,6 +399,9 @@ async def admin_page(request):
                   f'<button class="btn ghost" data-close aria-label="Close">Close</button></div>'
                   + (item("Why it isn't published", problems) if problems else
                      item("State", state(off_apps.get(a["name"]))))
+                  + item("Risk", (tag("Low", "published") + '<div class="note">Code-only changes publish without review. Set in app_risk.yaml</div>'
+                                  if config.app_risk(a["name"]) == "low" else
+                                  tag("High", "refused") + '<div class="note">Every change needs an engineer\'s review. Default; set in app_risk.yaml</div>'))
                   + item("Description", html.escape(a.get("description") or "—"))
                   + item("Connectors", conns)
                   + item("Tools per role", grants)

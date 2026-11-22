@@ -1,0 +1,4 @@
+# Apps whose code-only changes may publish without an engineer's review (checks must still pass).
+# Every app not listed is high risk: any change to it, code included, needs a platform engineer's approval.
+# Good candidates: read-only dashboards. An app.yaml change always needs review, whatever the risk.
+low: []

@@ -40,6 +40,20 @@ def can_view_audit(user, app):
     return user["role"] in admin_roles() or user["role"] in app["audit_viewers"]
 
 
+def low_risk_apps():
+    """From app_risk.yaml. Apps not listed are high risk, so every change to them needs an engineer's review."""
+    path = ROOT / "app_risk.yaml"
+    data = yaml.safe_load(path.read_text()) if path.exists() else None
+    low = (data or {}).get("low") if isinstance(data, dict) else None
+    if low is not None and not (isinstance(low, list) and all(isinstance(n, str) for n in low)):
+        raise ValueError("app_risk.yaml: low must be a list of app names")
+    return sorted(low or [])
+
+
+def app_risk(name):
+    return "low" if name in low_risk_apps() else "high"
+
+
 def connector_group(name):
     group = (POLICY.get("connectors") or {}).get(name)
     return group if group in GROUPS else "blocked"
