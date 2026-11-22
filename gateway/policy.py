@@ -16,7 +16,10 @@ def audit_settings(app, operation):
     if not isinstance(retention, int) or retention < base["min_retention_days"]:
         problems.append(f"{operation}: retention must be at least {base['min_retention_days']} days")
         retention = base["min_retention_days"]
-    extra = override.get("mask_inputs", [])
+    extra = override.get("mask_inputs") or []
+    if not isinstance(extra, list) or not all(isinstance(p, str) for p in extra):
+        problems.append(f"{operation}: mask_inputs must be a list of input names")
+        extra = []
     unknown = [p for p in extra if p not in op["params"]]
     if unknown:
         problems.append(f"{operation}: mask_inputs names unknown inputs {unknown}")

@@ -112,11 +112,19 @@ def load_apps():
             doc = yaml.safe_load(manifest.read_text()) or {}
         except yaml.YAMLError as e:
             doc = {"_error": f"app.yaml could not be read: {e}"}
+        if not isinstance(doc, dict):
+            doc = {"_error": "app.yaml must be a list of settings"}
         doc["name"] = folder.name
-        doc.setdefault("title", folder.name)
-        doc.setdefault("access", [])
-        doc.setdefault("operations", [])
-        doc.setdefault("audit", {})
+        if not isinstance(doc.get("title"), str):
+            doc["title"] = folder.name
+        for key, kind in (("access", list), ("operations", list), ("audit", dict)):
+            value = doc.get(key) or kind()
+            valid = isinstance(value, kind) and all(isinstance(item, str) for item in value) and (
+                kind is list or all(isinstance(v, dict) or v is None for v in value.values()))
+            if not valid:
+                doc.setdefault("_error", f"app.yaml: {key} is not in the expected form")
+                value = kind()
+            doc[key] = value
         apps[folder.name] = doc
     return apps
 
