@@ -390,6 +390,8 @@ async def admin_api(request):
             message, failed = (out.stdout + out.stderr).strip()[-400:], out.returncode != 0
         except (OSError, subprocess.SubprocessError) as e:
             message, failed = str(e), True
+        if failed:
+            return JSONResponse({"ok": False, "error": "Sync failed: " + message}, status_code=502)
         return done("admin.sync_apps", {}, message=message)
     if action == "reset-data":
         handlers.reset_data()
