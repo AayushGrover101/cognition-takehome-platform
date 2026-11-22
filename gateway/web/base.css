@@ -89,3 +89,13 @@ p { margin: 0; }
 .tag.external { background: var(--warn-bg); border-color: transparent; color: var(--warn); }
 .tag.blocked, .tag.refused { background: var(--bad-bg); border-color: transparent; color: var(--bad); }
 .tag.published, .tag.allowed { background: var(--ok-bg); border-color: transparent; color: var(--ok); }
+
+/* Audit and admin tables */
+.wrap.wide { max-width: 1120px; }
+table.log { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.log th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+table.log td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.log td.num { font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--muted); }
+table.log td.wrap-text { word-break: break-word; max-width: 320px; }
+table.log code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.log .note { color: var(--muted); font-size: 12px; }

@@ -6,3 +6,5 @@ roles:
     tools: [kyc.delete_everything, refunds.*, refunds.issue_refund]
   platform_engineer:
     tools: [kyc.*]
+audit_reads: [kyc.nope]
+audit_viewers: [wizard]

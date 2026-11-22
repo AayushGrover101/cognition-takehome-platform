@@ -53,3 +53,19 @@ tax ID, `kyc.get_case_full` returns all of it.
 Responses are `{"ok": true, "data": ...}` or `{"ok": false, "error": "reason"}` with 400 (bad inputs), 401, 403
 (no access or tool not granted), 404 (tool not available to this app), 409 (the system refused, e.g. already
 decided) or 415 (not JSON).
+
+## Section 3: audit
+
+| Piece | Where | What it does |
+| --- | --- | --- |
+| What's recorded | `gateway/audit.py`, `config.audited` | Every **write** tool call, always. **Reads** only when the app lists them in `audit_reads`. Allowed calls and refusals (role not granted, or the system said no) are both recorded, with who, role, tool, inputs and result. The browser has no say. |
+| One trail per app | SQLite `audit` table, keyed by app | Each app has its own sequence and SHA-256 hash chain (each entry includes the previous entry's hash), so each trail can be checked on its own. Editing or deleting an entry breaks the chain from that point. |
+| Viewing | `/audit/<app>` | Roles in the app's `audit_viewers` and the platform's `admin_roles` (`policy.yaml`). Apps show an "Audit trail" link in the top bar for them. |
+
+```yaml
+audit_reads: [kyc.get_case_full]     # reads are off unless listed; writes are always audited
+audit_viewers: [compliance_officer]  # who can see this app's trail
+```
+
+The database lives at `data/audit.db` (`AUDIT_DB` to change it). In production it would be an append-only store
+that the gateway can insert into but not update.

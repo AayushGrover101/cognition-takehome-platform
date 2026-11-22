@@ -17,6 +17,19 @@ def users():
     return {u["id"]: dict(u) for u in POLICY["users"]}
 
 
+def admin_roles():
+    return POLICY.get("admin_roles") or []
+
+
+def audited(app, tool):
+    """Writes are always audited; reads only when app.yaml lists them in audit_reads."""
+    return tool.kind == "write" or any(grant_matches(p, tool.name) for p in app["audit_reads"])
+
+
+def can_view_audit(user, app):
+    return user["role"] in admin_roles() or user["role"] in app["audit_viewers"]
+
+
 def connector_group(name):
     group = (POLICY.get("connectors") or {}).get(name)
     return group if group in GROUPS else "blocked"
@@ -55,18 +68,23 @@ def grant_problems(roles, access, declared):
         if role not in (access if isinstance(access, list) else []):
             problems.append(f"Role {role} has tools but is not in access")
         tools = grants.get("tools") if isinstance(grants, dict) else None
-        if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
-            problems.append(f"{role}: tools must be a list of tool names")
-            continue
-        for pattern in tools:
-            connector = pattern.split(".", 1)[0]
-            if pattern.endswith(".*"):
-                if pattern.count(".") != 1 or connector not in declared:
-                    problems.append(f"{role}: {pattern} needs {connector} in connectors")
-            elif pattern not in TOOLS:
-                problems.append(f"{role}: unknown tool {pattern}")
-            elif connector not in declared:
-                problems.append(f"{role}: {pattern} needs {connector} in connectors")
+        problems += pattern_problems(role, tools, declared)
+    return problems
+
+
+def pattern_problems(where, patterns, declared):
+    if not isinstance(patterns, list) or not all(isinstance(t, str) for t in patterns):
+        return [f"{where} must be a list of tool names"]
+    problems = []
+    for pattern in patterns:
+        connector = pattern.split(".", 1)[0]
+        if pattern.endswith(".*"):
+            if pattern.count(".") != 1 or connector not in declared:
+                problems.append(f"{where}: {pattern} needs {connector} in connectors")
+        elif pattern not in TOOLS:
+            problems.append(f"{where}: unknown tool {pattern}")
+        elif connector not in declared:
+            problems.append(f"{where}: {pattern} needs {connector} in connectors")
     return problems
 
 
@@ -85,6 +103,12 @@ def app_problems(manifest):
     problems += connector_problems(declared)
     declared = declared if isinstance(declared, list) else []
     problems += grant_problems(manifest.get("roles", {}), access, declared)
+    problems += pattern_problems("audit_reads", manifest.get("audit_reads", []), declared)
+    viewers = manifest.get("audit_viewers", [])
+    if not isinstance(viewers, list):
+        problems.append("audit_viewers must be a list of roles")
+    else:
+        problems += [f"Unknown role in audit_viewers: {r}" for r in viewers if r not in ROLES]
     return problems
 
 
@@ -105,6 +129,8 @@ def load_apps():
             "access": manifest.get("access") if isinstance(manifest.get("access"), list) else [],
             "connectors": manifest.get("connectors") if isinstance(manifest.get("connectors"), list) else [],
             "roles": manifest.get("roles") if isinstance(manifest.get("roles"), dict) else {},
+            "audit_reads": manifest.get("audit_reads") if isinstance(manifest.get("audit_reads"), list) else [],
+            "audit_viewers": manifest.get("audit_viewers") if isinstance(manifest.get("audit_viewers"), list) else [],
             "problems": problems,
         }
     return apps
