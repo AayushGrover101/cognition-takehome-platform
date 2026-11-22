@@ -62,8 +62,10 @@ async def signin(request):
         f'{html.escape(u["name"])} — {html.escape(label(u["role"]))}</option>'
         for u in config.users().values()
     )
+    target = config.load_apps().get(nxt.split("/")[2]) if nxt.startswith("/apps/") and nxt.count("/") >= 2 else None
+    sub = f"Continue to {target['title']} with your company account." if target else "Use your company account to continue."
     return page("signin.html", options=options, none_selected="" if me else " selected",
-                next=html.escape(nxt, quote=True))
+                next=html.escape(nxt, quote=True), sub=html.escape(sub))
 
 
 def can_open(user, app):
@@ -92,7 +94,9 @@ async def portal(request):
 
 
 async def signout(request):
-    response = RedirectResponse("/signin", status_code=303)
+    """GET too, so app pages (which can't post forms) can link here. ?next= is where the next person lands."""
+    nxt = safe_next(request.query_params.get("next", "/"))
+    response = RedirectResponse("/signin" if nxt == "/" else f"/signin?next={quote(nxt, safe='')}", status_code=303)
     response.delete_cookie(COOKIE)
     return response
 
@@ -231,7 +235,7 @@ def create_app():
     return Starlette(routes=[
         Route("/", portal),
         Route("/signin", signin, methods=["GET", "POST"]),
-        Route("/signout", signout, methods=["POST"]),
+        Route("/signout", signout, methods=["GET", "POST"]),
         Route("/apps/{app}/", serve_app),
         Route("/apps/{app}/{path:path}", serve_app),
         Route("/shared/{path:path}", serve_shared),

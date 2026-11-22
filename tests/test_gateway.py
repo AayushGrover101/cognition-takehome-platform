@@ -86,3 +86,15 @@ def test_sign_out_clears_the_cookie(gateway):
     r = gateway("priya").post("/signout")
     assert r.status_code == 303 and r.headers["location"] == "/signin"
     assert 'gw_user=""' in r.headers["set-cookie"] or "Max-Age=0" in r.headers["set-cookie"]
+
+
+def test_app_pages_get_the_gateway_top_bar_and_can_sign_out(gateway):
+    assert gateway("priya").get("/web/topbar.js").status_code == 200
+    r = gateway("priya").get("/signout?next=/apps/kyc-demo/")
+    assert r.status_code == 303 and r.headers["location"] == "/signin?next=%2Fapps%2Fkyc-demo%2F"
+    assert gateway("priya").get("/signout?next=//evil.test").headers["location"] == "/signin"
+
+
+def test_sign_in_names_the_app_you_are_going_to(gateway):
+    assert "Continue to KYC demo with your company account." in gateway().get("/signin?next=/apps/kyc-demo/").text
+    assert "Use your company account to continue." in gateway().get("/signin?next=/apps/nope/").text

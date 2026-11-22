@@ -17,6 +17,7 @@ python3 -m pytest tests
 | Piece | Where | What it does |
 | --- | --- | --- |
 | Sign-in | `/signin`, `/signout`, `policy.yaml` | Mocked single sign-on: choose an account from a dropdown; the role comes from `policy.yaml`. Sets an HTTP-only cookie. |
+| App top bar | `/web/topbar.js` | Apps include it to get the gateway's top bar: app name, who is signed in, and Sign out (back to sign-in, then to the same app). A signed-out link to an app goes through sign-in and lands on that app. |
 | Portal | `/` | Lists only the apps whose `access` includes your role. |
 | App hosting | `/apps/<app>/...` | Reads `APPS_DIR/apps/<app>/` on every request. Checks sign-in, a valid `app.yaml`, and that your role is in `access`, for every file. Serves static file types only, never outside the app folder. |
 | Browser lockdown | `Content-Security-Policy` on app pages | The page loads files and sends requests only to the gateway. A browser call to `/api/<app>/` is refused unless it comes from that app's own pages, so one app can't use your grants in another. |
