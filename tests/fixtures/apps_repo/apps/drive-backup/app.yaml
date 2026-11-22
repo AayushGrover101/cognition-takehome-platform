@@ -1,0 +1,3 @@
+title: Drive backup
+access: [kyc_analyst]
+connectors: [gdrive]

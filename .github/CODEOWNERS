@@ -1,0 +1,6 @@
+# Everything here decides what apps can reach: connectors (tools and credentials), policy.yaml (roles and
+# connector groups) and the gateway that enforces them. A platform engineer must approve every change.
+# Turn on "Require review from Code Owners" for master in the repo settings for this to block merging.
+*                     @AayushGrover101
+/gateway/connectors/  @AayushGrover101
+/policy.yaml          @AayushGrover101

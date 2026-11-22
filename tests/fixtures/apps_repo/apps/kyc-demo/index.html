@@ -1,1 +1,15 @@
-<!doctype html><title>KYC demo</title><script src="app.js"></script>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KYC demo</title>
+<link rel="stylesheet" href="/web/base.css"><link rel="stylesheet" href="app.css">
+<script src="/web/gateway.js" defer></script><script src="/web/topbar.js" defer></script><script src="app.js" defer></script></head>
+<body>
+<main class="layout">
+<section class="queue">
+<h1>Review queue</h1>
+<p class="sub">Cases waiting for a decision. Your tools in this app: <span id="tools"></span></p>
+<table><thead><tr><th>Case</th><th>Customer</th><th>Country</th><th>Risk</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table>
+</section>
+<aside class="detail" id="detail"><p class="muted">Select a case to see its details.</p></aside>
+</main>
+</body></html>

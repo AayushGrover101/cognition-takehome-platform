@@ -42,9 +42,9 @@ def test_only_static_files_inside_the_app_folder(gateway):
 
 
 def test_app_pages_carry_the_browser_lockdown(gateway):
-    r = gateway("priya").get("/apps/kyc-demo/", headers={"host": "tools.test"})
+    r = gateway("priya").get("/apps/kyc-demo/")
     csp = r.headers["content-security-policy"]
-    assert "connect-src http://tools.test/api/kyc-demo/;" in csp
+    assert "connect-src 'self';" in csp and r.headers["referrer-policy"] == "same-origin"
     assert "default-src 'none'" in csp and "form-action 'none'" in csp
     assert r.headers["cache-control"] == "no-store"
 
@@ -57,8 +57,10 @@ def test_shared_files(gateway):
 
 def test_me_returns_user_and_app_only_to_people_with_access(gateway):
     data = gateway("dana").get("/api/kyc-demo/_me").json()["data"]
-    assert data == {"user": {"name": "Dana Ortiz", "role": "senior_reviewer"},
-                    "app": {"name": "kyc-demo", "title": "KYC demo"}}
+    assert data == {"user": {"name": "Dana Ortiz", "role": "compliance_officer", "title": "Compliance Officer"},
+                    "app": {"name": "kyc-demo", "title": "KYC demo"},
+                    "tools": ["kyc.decide_case", "kyc.escalate_case", "kyc.get_case", "kyc.get_case_full",
+                              "kyc.list_cases"]}
     assert gateway("marcus").get("/api/kyc-demo/_me").status_code == 403
 
 
@@ -76,7 +78,7 @@ def test_sign_in_keeps_the_page_you_asked_for(gateway):
 def test_sign_in_page_offers_a_dropdown_of_accounts(gateway):
     text = gateway().get("/signin?next=/apps/kyc-demo/").text
     assert 'name="user" required>' in text and 'value="/apps/kyc-demo/"' in text
-    assert '<option value="priya">Priya Shah \u2014 analyst</option>' in text
+    assert '<option value="priya">Priya Shah \u2014 KYC Analyst</option>' in text
     assert '<option value="dana" selected>' in gateway("dana").get("/signin").text
 
 
@@ -84,3 +86,15 @@ def test_sign_out_clears_the_cookie(gateway):
     r = gateway("priya").post("/signout")
     assert r.status_code == 303 and r.headers["location"] == "/signin"
     assert 'gw_user=""' in r.headers["set-cookie"] or "Max-Age=0" in r.headers["set-cookie"]
+
+
+def test_app_pages_get_the_gateway_top_bar_and_can_sign_out(gateway):
+    assert gateway("priya").get("/web/topbar.js").status_code == 200
+    r = gateway("priya").get("/signout?next=/apps/kyc-demo/")
+    assert r.status_code == 303 and r.headers["location"] == "/signin?next=%2Fapps%2Fkyc-demo%2F"
+    assert gateway("priya").get("/signout?next=//evil.test").headers["location"] == "/signin"
+
+
+def test_sign_in_names_the_app_you_are_going_to(gateway):
+    assert "Continue to KYC demo with your company account." in gateway().get("/signin?next=/apps/kyc-demo/").text
+    assert "Use your company account to continue." in gateway().get("/signin?next=/apps/nope/").text

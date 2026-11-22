@@ -1,0 +1,3 @@
+title: Mixed
+access: [kyc_analyst]
+connectors: [kyc, slack]

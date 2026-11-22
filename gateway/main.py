@@ -1,14 +1,13 @@
 """The gateway: sign-in, the portal, and serving app files to people allowed to open them."""
 import html
-import os
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from starlette.applications import Starlette
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from starlette.routing import Route
 
-from . import config
+from . import config, connectors
 
 WEB = Path(__file__).parent / "web"
 STATIC_TYPES = {".html", ".js", ".css", ".svg", ".png", ".jpg", ".ico", ".woff2"}
@@ -22,7 +21,7 @@ def current_user(request):
 
 
 def label(role):
-    return role.replace("_", " ")
+    return config.ROLES.get(role, role)
 
 
 def page(name, status=200, **values):
@@ -63,8 +62,10 @@ async def signin(request):
         f'{html.escape(u["name"])} — {html.escape(label(u["role"]))}</option>'
         for u in config.users().values()
     )
+    target = config.load_apps().get(nxt.split("/")[2]) if nxt.startswith("/apps/") and nxt.count("/") >= 2 else None
+    sub = f"Continue to {target['title']} with your company account." if target else "Use your company account to continue."
     return page("signin.html", options=options, none_selected="" if me else " selected",
-                next=html.escape(nxt, quote=True))
+                next=html.escape(nxt, quote=True), sub=html.escape(sub))
 
 
 def can_open(user, app):
@@ -93,24 +94,19 @@ async def portal(request):
 
 
 async def signout(request):
-    response = RedirectResponse("/signin", status_code=303)
+    """GET too, so app pages (which can't post forms) can link here. ?next= is where the next person lands."""
+    nxt = safe_next(request.query_params.get("next", "/"))
+    response = RedirectResponse("/signin" if nxt == "/" else f"/signin?next={quote(nxt, safe='')}", status_code=303)
     response.delete_cookie(COOKIE)
     return response
 
 
-def public_origin(request):
-    if os.environ.get("PUBLIC_ORIGIN"):
-        return os.environ["PUBLIC_ORIGIN"].rstrip("/")
-    proto = request.headers.get("x-forwarded-proto", request.url.scheme).split(",")[0].strip()
-    host = request.headers.get("x-forwarded-host", request.headers.get("host", "")).split(",")[0].strip()
-    return f"{proto}://{host}"
-
-
-def app_csp(request, app_name):
-    """Browser lockdown: load files only from here, and send requests only to this app's own /api path."""
+def app_csp():
+    """Browser lockdown: load files and send requests only to this gateway. Which app's API a page may
+    call is checked on the server (from_own_page), so it holds behind any proxy."""
     return (
         "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; "
-        f"connect-src {public_origin(request)}/api/{app_name}/; "
+        "connect-src 'self'; "
         "form-action 'none'; base-uri 'none'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; "
         "sandbox allow-scripts allow-same-origin allow-downloads allow-modals; "
         "report-uri /csp-report"
@@ -142,7 +138,7 @@ async def serve_app(request):
     target = static_file(config.APPS_DIR / "apps" / name, rel)
     if not target:
         return notice("Not found", [rel], 404)
-    return FileResponse(target, headers={"Content-Security-Policy": app_csp(request, name),
+    return FileResponse(target, headers={"Content-Security-Policy": app_csp(), "Referrer-Policy": "same-origin",
                                          "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
 
@@ -164,17 +160,70 @@ async def web_static(request):
 
 # ---------- what an app can ask about the signed-in person ----------
 
+def from_own_page(request, app_name):
+    """A browser call to /api/<app>/ must come from that app's own pages, so one app's code can't use
+    the signed-in person's grants in another app. Non-browser clients send no Sec-Fetch-Site; they
+    can only do what the person could do anyway. On one shared origin this only guards against
+    accidental cross-app calls (app code can forge the referrer or open another app's page); real
+    isolation needs one subdomain per app plus the publish checks."""
+    site = request.headers.get("sec-fetch-site")
+    if site is None:
+        return True
+    referer = urlsplit(request.headers.get("referer", "")).path
+    return site == "same-origin" and referer.startswith(f"/apps/{app_name}/")
+
+
 async def me(request):
     user = current_user(request)
     if not user:
         return JSONResponse({"ok": False, "error": "Not signed in"}, status_code=401)
+    if not from_own_page(request, request.path_params["app"]):
+        return refuse(403, "Calls must come from this app's own pages")
     app = config.load_apps().get(request.path_params["app"])
     if not app or not can_open(user, app):
         return JSONResponse({"ok": False, "error": "You don't have access to this app"}, status_code=403)
     return JSONResponse({"ok": True, "data": {
-        "user": {"name": user["name"], "role": user["role"]},
+        "user": {"name": user["name"], "role": user["role"], "title": label(user["role"])},
         "app": {"name": app["name"], "title": app["title"]},
+        "tools": config.tools_for(app, user["role"]),
     }})
+
+
+def refuse(status, error):
+    return JSONResponse({"ok": False, "error": error}, status_code=status)
+
+
+async def call_tool(request):
+    """POST /api/<app>/<connector>.<tool> with the inputs as a JSON object."""
+    user = current_user(request)
+    if not user:
+        return refuse(401, "Not signed in")
+    if not from_own_page(request, request.path_params["app"]):
+        return refuse(403, "Calls must come from this app's own pages")
+    app = config.load_apps().get(request.path_params["app"])
+    if not app or not can_open(user, app):
+        return refuse(403, "You don't have access to this app")
+    name = request.path_params["tool"]
+    tool = connectors.TOOLS.get(name)
+    if not tool or tool.connector not in app["connectors"]:
+        return refuse(404, f"This app has no tool called {name}")
+    if name not in config.tools_for(app, user["role"]):
+        return refuse(403, f"Your role ({label(user['role'])}) can't use {name} in this app")
+    if request.headers.get("content-type", "").split(";")[0].strip() != "application/json":
+        return refuse(415, "Send inputs as JSON")
+    try:
+        body = await request.json()
+    except ValueError:
+        return refuse(400, "Inputs must be valid JSON")
+    args, problem = connectors.check_inputs(tool.inputs, body)
+    if problem:
+        return refuse(400, problem)
+    ctx = {"user": {"id": user["id"], "name": user["name"], "role": user["role"]}, "app": app["name"]}
+    try:
+        result = tool.handler(args, ctx)
+    except connectors.ToolError as e:
+        return refuse(409, str(e))
+    return JSONResponse({"ok": True, "data": connectors.keep_declared(result, tool.returns)})
 
 
 async def csp_report(request):
@@ -186,12 +235,13 @@ def create_app():
     return Starlette(routes=[
         Route("/", portal),
         Route("/signin", signin, methods=["GET", "POST"]),
-        Route("/signout", signout, methods=["POST"]),
+        Route("/signout", signout, methods=["GET", "POST"]),
         Route("/apps/{app}/", serve_app),
         Route("/apps/{app}/{path:path}", serve_app),
         Route("/shared/{path:path}", serve_shared),
         Route("/web/{path:path}", web_static),
         Route("/api/{app}/_me", me),
+        Route("/api/{app}/{tool}", call_tool, methods=["POST"]),
         Route("/csp-report", csp_report, methods=["POST"]),
     ])
 

@@ -6,7 +6,13 @@ os.environ["APPS_DIR"] = str(Path(__file__).parent / "fixtures" / "apps_repo")
 import pytest
 from starlette.testclient import TestClient
 
+from gateway import connectors
 from gateway.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def fresh_data():
+    connectors.reset()
 
 
 @pytest.fixture()
