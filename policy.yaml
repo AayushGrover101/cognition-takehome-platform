@@ -15,10 +15,6 @@ admin_roles: [platform_engineer]
 users:
   - {id: priya,  name: Priya Shah,  role: kyc_analyst}
   - {id: dana,   name: Dana Ortiz,  role: compliance_officer}
-  - {id: marcus, name: Marcus Lee,  role: support_agent}
-  - {id: lena,   name: Lena Novak,  role: support_lead}
-  - {id: omar,   name: Omar Haddad, role: product_manager}
-  - {id: alex,   name: Alex Chen,   role: engineer}
   - {id: sam,    name: Sam Kim,     role: platform_engineer}
 
 # Connector groups (as in Power Platform DLP). Business: company systems and data. Non-business: outside services.
