@@ -1,97 +1,63 @@
 # cognition-takehome-platform
 
-Gateway for the internal-tools app builder (engineer-owned). Apps are static files in
-[cognition-takehome-apps](https://github.com/AayushGrover101/cognition-takehome-apps); the gateway signs people in,
-decides who can open each app, and serves the app's files with a browser lockdown.
+The gateway for the internal-tools app builder. **This is the repo you run.** It is owned by engineers.
 
-## Run
+Apps live in [cognition-takehome-apps](https://github.com/AayushGrover101/cognition-takehome-apps) as static files
+(HTML/JS plus an `app.yaml`). The gateway reads them from that repo and serves them. It also:
+
+- signs people in and shows a portal with the apps each person can open;
+- runs every data request through **connectors**: named tools engineers write, such as `kyc.decide_case`;
+- enforces each app's `app.yaml` on the server: which roles get which tools, and which fields are masked;
+- writes each app's **audit trail**: nothing by default, only the tools the app opts in, hash-chained;
+- locks the browser down so apps can only talk to the gateway;
+- has an admin page (`/admin`) and kill switches (`switches.yaml`).
+
+## Run it
+
+Clone both repos next to each other, then:
 
 ```bash
+cd cognition-takehome-platform
 pip install -r requirements.txt
 APPS_DIR=../cognition-takehome-apps python3 -m uvicorn gateway.main:app --port 8090
-python3 -m pytest tests
 ```
 
-## What's here (section 1: gateway core)
+Open http://localhost:8090 and pick a person:
 
-| Piece | Where | What it does |
+| Person | Role | Can |
 | --- | --- | --- |
-| Sign-in | `/signin`, `/signout`, `policy.yaml` | Mocked single sign-on: choose an account from a dropdown; the role comes from `policy.yaml`. Sets an HTTP-only cookie. |
-| App top bar | `/web/topbar.js` | Apps include it to get the gateway's top bar: app name, who is signed in, and Sign out (back to sign-in, then to the same app). A signed-out link to an app goes through sign-in and lands on that app. |
-| Portal | `/` | Lists only the apps whose `access` includes your role. |
-| App hosting | `/apps/<app>/...` | Reads `APPS_DIR/apps/<app>/` on every request. Checks sign-in, a valid `app.yaml`, and that your role is in `access`, for every file. Serves static file types only, never outside the app folder. |
-| Browser lockdown | `Content-Security-Policy` on app pages | The page loads files and sends requests only to the gateway. A browser call to `/api/<app>/` is refused unless it comes from that app's own pages, so one app can't use your grants in another. |
-| Shared files | `/shared/...` | Common JS/CSS from `APPS_DIR/shared/`, locked down if opened directly. |
-| `_me` | `/api/<app>/_me` | The signed-in person's name and role, for apps that can open this app. |
+| Priya Shah | KYC Analyst | Use apps built for analysts. Sees masked fields only. |
+| Dana Ortiz | Compliance Officer | Sees full KYC data and reads audit trails, where an app allows it. |
+| Sam Kim | Platform Engineer | Admin: `/admin` and every audit trail. |
 
-## Section 2: connectors and tool calls
+The portal is empty until an app exists in `cognition-takehome-apps/apps/`. The gateway re-reads that folder on every
+request, so a new or changed app appears without a restart.
 
-| Piece | Where | What it does |
+Tests: `python3 -m pytest tests`
+
+## What's mocked
+
+| Mocked | Here | In production |
 | --- | --- | --- |
-| Connectors | `gateway/connectors/<name>.py` | One per system. Each tool has a name, inputs, the fields it returns and whether it reads or writes. Engineers write them; they hold the credentials (made-up data here). |
-| Connector groups | `policy.yaml` → `connectors` | Business, Non-business or Blocked. A connector not listed counts as Blocked. |
-| Tool calls | `POST /api/<app>/<connector>.<tool>` | Checks sign-in, app access, that the tool's connector is declared by the app, that the role is granted the tool, and the inputs. Returns only the declared fields. |
-| Client | `/web/gateway.js` | `gateway.call('kyc.get_case', {case_id})` and `gateway.me()`. Refusals throw an `Error` with the reason. |
+| SSO | Pick a person from a list. People and roles come from `policy.yaml`. | Your identity provider (Okta, Entra ID). Roles from groups. |
+| Connectors | Made-up data in memory (`gateway/connectors/`). It resets when the gateway restarts. | The same tools, calling your real systems with credentials only the gateway holds. |
+| Audit storage | SQLite at `data/audit.db` (change it with `AUDIT_DB`). | Append-only managed database, plus a copy of each trail's latest hash in write-once storage. |
+| App hosting | Every app on one origin, at `/apps/<name>/`. | One subdomain per app, for stronger isolation between apps. |
 
-`app.yaml`:
+## Where things are
 
-```yaml
-title: KYC review queue
-description: Review and decide pending KYC cases.
-access: [kyc_analyst, compliance_officer]   # roles that can open the app
-connectors: [kyc]                    # can't mix Business and Non-business; Blocked is refused
-roles:                               # tools per role; anything not granted is denied
-  kyc_analyst:
-    tools: [kyc.list_cases, kyc.get_case, kyc.escalate_case]
-  compliance_officer:
-    tools: [kyc.*]                   # every kyc tool, including get_case_full and decide_case
+| Path | What it is |
+| --- | --- |
+| `gateway/main.py` | Sign-in, portal, app hosting, tool calls, audit pages, admin page |
+| `gateway/connectors/` | One file per system, with its tools (`kyc`, `refunds`, `flags`, `slack`, `gdrive`) |
+| `gateway/audit.py` | Per-app audit trails |
+| `policy.yaml` | Roles, people, admin roles, connector groups (Business / Non-business / Blocked) |
+| `app_risk.yaml` | Apps whose code-only changes can publish without review. Every app not listed is high risk. |
+| `switches.yaml` | Turn off an app, connector or single tool, with a reason |
+| `.github/CODEOWNERS` | A platform engineer approves every change here |
+
+After adding or changing a tool, refresh the catalogue the apps repo and Devin read:
+
+```bash
+python3 -m gateway.catalog > ../cognition-takehome-apps/platform/catalog.json
 ```
-
-Sensitive data is controlled by which tool a role gets: `kyc.get_case` returns the last four characters of the
-tax ID, `kyc.get_case_full` returns all of it.
-
-Responses are `{"ok": true, "data": ...}` or `{"ok": false, "error": "reason"}` with 400 (bad inputs), 401, 403
-(no access or tool not granted), 404 (tool not available to this app), 409 (the system refused, e.g. already
-decided) or 415 (not JSON).
-
-## Section 3: audit
-
-| Piece | Where | What it does |
-| --- | --- | --- |
-| What's recorded | `gateway/audit.py`, `config.audited` | Nothing by default. Only calls to the tools (reads or writes) the app lists under `audit` in its `app.yaml`. Allowed calls and refusals (role not granted, or the system said no) are both recorded, with who, role, tool, inputs and result. The browser has no say. |
-| One trail per app | SQLite `audit` table, keyed by app | Each app has its own sequence and SHA-256 hash chain (each entry includes the previous entry's hash), so each trail can be checked on its own. Editing or deleting an entry breaks the chain from that point. |
-| Viewing | `/audit/<app>` | Roles in the app's `audit_viewers` and the platform's `admin_roles` (`policy.yaml`). Apps show an "Audit trail" link in the top bar for them. |
-
-```yaml
-audit: [kyc.decide_case, kyc.escalate_case, kyc.get_case_full]   # nothing is audited unless listed
-audit_retention_days: 2555           # optional; without it entries are kept
-audit_viewers: [compliance_officer]  # who can see this app's trail
-```
-
-The database lives at `data/audit.db` (`AUDIT_DB` to change it). In production it would be an append-only store
-that the gateway can insert into but not update.
-
-## Section 4: admin page
-
-`/admin`, for `admin_roles` (Sam Kim, Platform Engineer). Read-only; changes go through pull requests.
-
-Apps, connectors and single tools are turned off in `switches.yaml` (name and reason), like infrastructure as code.
-The gateway re-reads it on every request: a turned-off app is hidden from the portal and returns 503, and calls to a
-turned-off connector or tool are refused with 503 (and audited if the tool is). Deleting the line turns it back on,
-which only restores what `app.yaml` grants. The file has its own CODEOWNERS line, so on-call can approve it quickly.
-
-- **Apps:** published or not (with the reasons), connectors and their groups, the tools each role actually gets,
-  how many write tools it can run, its opted-in reads, and a link to its audit trail.
-- **Connectors:** group, every tool with read/write and description, which apps use it.
-- **People and roles:** each person's role and the apps they can open.
-- **Recent activity:** the latest 50 audit entries across apps.
-
-## Section 5: catalogue for the apps repo
-
-`python3 -m gateway.catalog > ../cognition-takehome-apps/platform/catalog.json` exports roles, admin roles,
-connector groups and every tool (kind, inputs, returned fields, description). The apps repo's publish checks and
-Devin read it, so they know what exists without importing gateway code.
-
-App risk lives in `app_risk.yaml`: apps listed under `low` publish code-only changes without review; every other
-app is high risk, so any change to it needs an engineer's approval (the apps repo's "Engineer approval" check).
-The level is exported as `app_risk` in the catalogue and shown in each app's pop-up on the admin page.
