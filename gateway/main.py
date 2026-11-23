@@ -347,7 +347,11 @@ async def admin_page(request):
     if user["role"] not in config.admin_roles():
         return notice("You can't open the admin page",
                       [f"Signed in as {user['name']} ({label(user['role'])}).", "Only platform admins can."], 403)
-    apps, counts = config.load_apps(), audit.counts()
+    apps = config.load_apps()
+    for a in apps.values():
+        if a["audit_retention_days"]:
+            audit.prune(a["name"], a["audit_retention_days"])
+    counts = audit.counts()
     off_apps, off_conns, off_tools = switches.off("app"), switches.off("connector"), switches.off("tool")
 
     def state(reason):
@@ -356,7 +360,7 @@ async def admin_page(request):
 
     people = "".join(f'<tr><td>{html.escape(u["name"])}</td><td>{html.escape(label(u["role"]))}</td>'
                      f'<td><code>{html.escape(u["role"])}</code></td>'
-                     f'<td>{", ".join(html.escape(a["title"]) for a in apps.values() if can_open(u, a)) or "—"}</td></tr>'
+                     f'<td>{", ".join(html.escape(a["title"]) + (" (turned off)" if a["name"] in off_apps else "") for a in apps.values() if can_open(u, a)) or "—"}</td></tr>'
                      for u in config.users().values())
 
     def connector_row(name):
@@ -386,7 +390,7 @@ async def admin_page(request):
                                             if t.connector in a["connectors"] and config.audited(a, t)]
         listed = "".join(f'<div><code>{html.escape(t.name)}</code> <span class="note">'
                          f'{t.kind}{"" if t.name in granted else "; no role granted, refusals only"}</span></div>' for t in audited)
-        conns = " ".join(tag(c, config.connector_group(c)) for c in a["connectors"]) or "—"
+        conns = " ".join(tag(str(c), config.connector_group(str(c))) for c in a["connectors"]) or "—"
         viewers = ", ".join(html.escape(label(str(r))) for r in a["audit_viewers"]) or "none"
         n = counts.get(a["name"], 0)
         row = (f'<tr class="clickable" data-dialog="app-{name}" tabindex="0">'

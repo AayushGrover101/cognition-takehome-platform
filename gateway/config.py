@@ -117,7 +117,7 @@ def app_problems(manifest):
     if not isinstance(access, list) or not access:
         problems.append("app.yaml needs an access list of roles")
     else:
-        problems += [f"Unknown role in access: {r}" for r in access if r not in ROLES]
+        problems += [f"Unknown role in access: {r}" for r in access if not isinstance(r, str) or r not in ROLES]
     declared = manifest.get("connectors", [])
     problems += connector_problems(declared)
     declared = declared if isinstance(declared, list) else []
@@ -127,7 +127,7 @@ def app_problems(manifest):
     if not isinstance(viewers, list):
         problems.append("audit_viewers must be a list of roles")
     else:
-        problems += [f"Unknown role in audit_viewers: {r}" for r in viewers if r not in ROLES]
+        problems += [f"Unknown role in audit_viewers: {r}" for r in viewers if not isinstance(r, str) or r not in ROLES]
     if "audit_retention_days" in manifest and not valid_retention(manifest["audit_retention_days"]):
         problems.append("audit_retention_days must be a whole number of days")
     return problems
